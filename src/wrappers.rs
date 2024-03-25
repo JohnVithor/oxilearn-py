@@ -1,5 +1,6 @@
-use crate::dqn::DoubleDeepAgent;
+use crate::{dqn::DoubleDeepAgent, experience_buffer::RandomExperienceBuffer};
 use pyo3::{pyclass, pymethods};
+use tch::Device;
 
 #[pyclass]
 pub struct DQNAgent {
@@ -9,9 +10,29 @@ pub struct DQNAgent {
 #[pymethods]
 impl DQNAgent {
     #[new]
-    fn new() -> Self {
+    fn new(
+        memory_size: Option<usize>,
+        min_memory_size: Option<usize>,
+        lr: Option<f64>,
+        discount_factor: Option<f32>,
+        device: Option<Device>,
+    ) -> Self {
+        let mem_replay = RandomExperienceBuffer::new(
+            memory_size.unwrap_or(10_000),
+            min_memory_size.unwrap_or(1_000),
+            rng.next_u64(),
+            device.unwrap_or(Device::Cpu),
+        );
         Self {
-            agent: DoubleDeepAgent::default(),
+            agent: DoubleDeepAgent::new(
+                action_selector,
+                mem_replay,
+                generate_policy,
+                opt,
+                lr,
+                discount_factor,
+                device,
+            ),
         }
     }
 

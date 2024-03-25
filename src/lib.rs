@@ -17,7 +17,7 @@ mod env;
 mod epsilon_greedy;
 mod experience_buffer;
 mod trainer;
-// mod wrappers;
+mod wrappers;
 
 use crate::{
     dqn::{DoubleDeepAgent, OptimizerEnum},
