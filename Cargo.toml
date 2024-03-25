@@ -1,0 +1,16 @@
+[package]
+name = "oxilearn"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "oxilearn"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.20.3", features = ["extension-module"] }
+tch = { version = "0.15.0", features = ["python-extension"] }
+torch-sys = { version = "0.15.0", features = ["python-extension"] }
+rand = { version="0.8", features = ["small_rng"] }
+numpy = "0.20"
