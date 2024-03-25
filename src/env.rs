@@ -1,13 +1,6 @@
-use numpy::{
-    ndarray::{Array1, ArrayD},
-    PyReadonlyArrayDyn,
-};
+use numpy::{ndarray::Array1, PyReadonlyArrayDyn};
 use pyo3::{exceptions::PyTypeError, types::PyTuple, Py, PyAny, PyResult, Python};
-
-// use tch::{
-//     nn::{self, Module, VarStore},
-//     Device, Kind,
-// };
+use tch::Tensor;
 
 use crate::OxiLearnErr;
 
@@ -52,7 +45,7 @@ impl PyEnv {
         })
     }
 
-    fn extract_state(&self, resulting_tuple: &PyTuple) -> Result<ArrayD<f32>, OxiLearnErr> {
+    fn extract_state(&self, resulting_tuple: &PyTuple) -> Result<Tensor, OxiLearnErr> {
         let Ok(start_obs) = resulting_tuple.get_item(0) else {
             return Err(OxiLearnErr::ExpectedItemNotFound);
         };
@@ -62,13 +55,19 @@ impl PyEnv {
                 let Some(slice) = binding.as_slice() else {
                     return Err(OxiLearnErr::ExpectedDataMissing);
                 };
-                Ok(Array1::from_vec(Vec::from(slice)).into_dyn())
+                Ok(Array1::from_vec(Vec::from(slice))
+                    .into_dyn()
+                    .try_into()
+                    .unwrap())
             }
             Err(_) => {
                 let Ok(elem) = start_obs.extract::<usize>() else {
                     return Err(OxiLearnErr::DifferentTypeExpected);
                 };
-                Ok(Array1::from_elem(1, elem as f32).into_dyn())
+                Ok(Array1::from_elem(1, elem as f32)
+                    .into_dyn()
+                    .try_into()
+                    .unwrap())
             }
         }
     }
@@ -129,8 +128,8 @@ impl PyEnv {
         }
     }
 
-    pub fn reset(&mut self) -> Result<ArrayD<f32>, OxiLearnErr> {
-        Python::with_gil(|py| -> Result<ArrayD<f32>, OxiLearnErr> {
+    pub fn reset(&mut self) -> Result<Tensor, OxiLearnErr> {
+        Python::with_gil(|py| -> Result<Tensor, OxiLearnErr> {
             // let kwargs = [("seed", 0)].into_py_dict(py);
             let Ok(call_result) = self.env.call_method(py, "reset", (), None) else {
                 return Err(OxiLearnErr::MethodNotFound("reset".to_string()));
@@ -142,25 +141,23 @@ impl PyEnv {
         })
     }
 
-    pub fn step(&mut self, action: usize) -> Result<(ArrayD<f32>, f32, bool, bool), OxiLearnErr> {
-        Python::with_gil(
-            |py| -> Result<(ArrayD<f32>, f32, bool, bool), OxiLearnErr> {
-                let Ok(call_result) =
-                    self.env
-                        .call_method(py, "step", PyTuple::new(py, [action]), None)
-                else {
-                    return Err(OxiLearnErr::MethodNotFound("step".to_string()));
-                };
-                let Ok(resulting_tuple) = call_result.downcast::<PyTuple>(py) else {
-                    return Err(OxiLearnErr::DifferentTypeExpected);
-                };
-                let state = self.extract_state(resulting_tuple)?;
-                let reward = self.extract_reward(resulting_tuple)?;
-                let done = self.extract_done(resulting_tuple)?;
-                let truncated = self.extract_truncated(resulting_tuple)?;
-                Ok((state, reward, done, truncated))
-            },
-        )
+    pub fn step(&mut self, action: usize) -> Result<(Tensor, f32, bool, bool), OxiLearnErr> {
+        Python::with_gil(|py| -> Result<(Tensor, f32, bool, bool), OxiLearnErr> {
+            let Ok(call_result) =
+                self.env
+                    .call_method(py, "step", PyTuple::new(py, [action]), None)
+            else {
+                return Err(OxiLearnErr::MethodNotFound("step".to_string()));
+            };
+            let Ok(resulting_tuple) = call_result.downcast::<PyTuple>(py) else {
+                return Err(OxiLearnErr::DifferentTypeExpected);
+            };
+            let state = self.extract_state(resulting_tuple)?;
+            let reward = self.extract_reward(resulting_tuple)?;
+            let done = self.extract_done(resulting_tuple)?;
+            let truncated = self.extract_truncated(resulting_tuple)?;
+            Ok((state, reward, done, truncated))
+        })
     }
 
     pub fn render(&self) -> String {

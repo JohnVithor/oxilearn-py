@@ -2,7 +2,7 @@ use crate::{
     epsilon_greedy::EpsilonGreedy, experience_buffer::RandomExperienceBuffer, PolicyGenerator,
 };
 use tch::{
-    nn::{linear, seq, Adam, AdamW, Module, Optimizer, OptimizerConfig, RmsProp, Sgd, VarStore},
+    nn::{Adam, AdamW, Module, Optimizer, OptimizerConfig, RmsProp, Sgd, VarStore},
     COptimizer, Device, Kind, TchError, Tensor,
 };
 
@@ -35,25 +35,6 @@ pub struct DoubleDeepAgent {
     pub discount_factor: f32,
 }
 
-impl Default for DoubleDeepAgent {
-    fn default() -> Self {
-        let device = Device::cuda_if_available();
-        let (policy, policy_vs) = DoubleDeepAgent::generate_policy(device);
-        let (target_policy, mut target_policy_vs) = DoubleDeepAgent::generate_policy(device);
-        target_policy_vs.copy(&policy_vs).unwrap();
-        Self {
-            action_selection: EpsilonGreedy::default(),
-            policy,
-            target_policy,
-            optimizer: Adam::default().build(&policy_vs, 0.0005).unwrap(),
-            policy_vs,
-            target_policy_vs,
-            memory: RandomExperienceBuffer::default(),
-            discount_factor: Default::default(),
-        }
-    }
-}
-
 impl DoubleDeepAgent {
     pub fn new(
         action_selector: EpsilonGreedy,
@@ -77,29 +58,6 @@ impl DoubleDeepAgent {
             target_policy_vs: mem_target,
             discount_factor,
         }
-    }
-
-    fn generate_policy(device: Device) -> (Box<dyn Module>, VarStore) {
-        const NEURONS: i64 = 128;
-
-        let mem_policy = VarStore::new(device);
-        let policy_net = seq()
-            .add(linear(
-                &mem_policy.root() / "al1",
-                4,
-                NEURONS,
-                Default::default(),
-            ))
-            .add_fn(|xs| xs.gelu("none"))
-            // .add_fn(|xs| xs.tanh())
-            .add(linear(
-                &mem_policy.root() / "al2",
-                NEURONS,
-                2,
-                Default::default(),
-            ))
-            .add_fn(|xs| xs.softmax(0, Kind::Float));
-        (Box::new(policy_net), mem_policy)
     }
 
     pub fn get_action(&mut self, state: &Tensor) -> usize {

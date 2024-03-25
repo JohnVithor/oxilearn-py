@@ -43,13 +43,13 @@ impl Trainer {
         let mut n_episodes = 0;
         let mut action_counter: u128 = 0;
         let mut epi_reward: f32 = 0.0;
-        let mut curr_obs: Tensor = self.env.reset()?.try_into().unwrap();
+        let mut curr_obs: Tensor = self.env.reset()?;
         agent.reset();
         for _ in 0..n_steps {
             let curr_action = agent.get_action(&curr_obs);
 
             let (next_obs, reward, done, truncated) = self.env.step(curr_action)?;
-            let next_obs = next_obs.try_into().unwrap();
+
             epi_reward += reward;
             agent.add_transition(&curr_obs, curr_action, reward, done, &next_obs);
 
@@ -86,7 +86,7 @@ impl Trainer {
                         };
                     }
                 }
-                curr_obs = self.env.reset()?.try_into().unwrap();
+                curr_obs = self.env.reset()?;
                 agent.action_selection_update(epi_reward);
                 n_episodes += 1;
                 epi_reward = 0.0;
@@ -113,12 +113,12 @@ impl Trainer {
         for _episode in 0..n_episodes {
             let mut action_counter: u128 = 0;
             let mut epi_reward: f32 = 0.0;
-            let obs_repr = self.env.reset()?.try_into().unwrap();
+            let obs_repr = self.env.reset()?;
             let mut curr_action = agent.get_best_action(&obs_repr);
             loop {
                 action_counter += 1;
                 let (obs, reward, done, truncated) = self.env.step(curr_action)?;
-                let next_obs_repr = obs.try_into().unwrap();
+                let next_obs_repr = obs;
                 let next_action_repr: usize = agent.get_best_action(&next_obs_repr);
                 let next_action = next_action_repr;
                 curr_action = next_action;
