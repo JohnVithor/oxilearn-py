@@ -32,7 +32,6 @@ impl Trainer {
         update_freq: u128,
         eval_at: u128,
         eval_for: u128,
-        debug: bool,
     ) -> Result<TrainResults, OxiLearnErr> {
         let mut training_reward: Vec<f32> = vec![];
         let mut training_length: Vec<u128> = vec![];
@@ -60,9 +59,6 @@ impl Trainer {
             }
 
             if done || truncated {
-                if debug {
-                    println!("{}", self.env.render());
-                }
                 training_reward.push(epi_reward);
                 if n_episodes % update_freq == 0 && agent.update_networks().is_err() {
                     println!("copy error")

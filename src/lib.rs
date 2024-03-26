@@ -19,6 +19,8 @@ mod experience_buffer;
 mod trainer;
 mod wrappers;
 
+use wrappers::DQNAgent;
+
 use crate::{
     dqn::{DoubleDeepAgent, OptimizerEnum},
     env::{PyEnv, SpaceInfo},
@@ -39,29 +41,44 @@ pub enum OxiLearnErr {
 
 type PolicyGenerator = dyn Fn(Device) -> (Box<dyn Module>, VarStore);
 
-fn generate_policy(input: i64, output: i64) -> Box<PolicyGenerator> {
-    const NEURONS: i64 = 128;
+fn generate_policy(
+    net_arch: Vec<(i64, String)>,
+    input: i64,
+    output: i64,
+) -> Result<Box<PolicyGenerator>, OxiLearnErr> {
+    let mut iter = net_arch.iter();
+    let previous = input;
 
-    Box::new(move |device: Device| -> (Box<dyn Module>, VarStore) {
-        let mem_policy = VarStore::new(device);
-        let policy_net = nn::seq()
-            .add(nn::linear(
+    let next;
+    if let Some(&(val, activation)) = iter.next() {
+        next = val;
+    }
+    Ok(Box::new(
+        move |device: Device| -> (Box<dyn Module>, VarStore) {
+            let mem_policy = VarStore::new(device);
+            let mut policy_net = nn::seq();
+
+            policy_net = policy_net.add(nn::linear(
                 &mem_policy.root() / "al1",
-                input,
-                NEURONS,
+                previous,
+                next,
                 Default::default(),
-            ))
-            // .add_fn(|xs| xs.gelu("none"))
-            .add_fn(|xs| xs.tanh())
-            .add(nn::linear(
-                &mem_policy.root() / "al2",
-                NEURONS,
-                output,
-                Default::default(),
-            ))
-            .add_fn(|xs| xs.softmax(0, Kind::Float));
-        (Box::new(policy_net), mem_policy)
-    })
+            ));
+
+            let policy_net = policy_net
+                // .add_fn(|xs| xs.gelu("none"))
+                .add_fn(|xs| xs.tanh())
+                .add(nn::linear(
+                    &mem_policy.root() / "al2",
+                    NEURONS,
+                    output,
+                    Default::default(),
+                ))
+                .add_fn(|xs| xs.softmax(0, Kind::Float));
+            // for (size, activation) in net_arch {}
+            (Box::new(policy_net), mem_policy)
+        },
+    ))
 }
 
 #[pyfunction]
@@ -109,7 +126,11 @@ pub fn test(env: Py<PyAny>) -> PyResult<f32> {
     let mut agent = DoubleDeepAgent::new(
         epsilon_greedy,
         mem_replay,
-        generate_policy(input, output),
+        generate_policy(
+            vec![(128, "relu".to_string()), (128, "softmax".to_string())],
+            input,
+            output,
+        ),
         OptimizerEnum::Adam(nn::Adam::default()),
         LEARNING_RATE,
         GAMMA,
@@ -122,7 +143,7 @@ pub fn test(env: Py<PyAny>) -> PyResult<f32> {
     let start = Instant::now();
 
     let r: Result<TrainResults, OxiLearnErr> =
-        trainer.train_by_steps(&mut agent, 200_000, UPDATE_FREQ, 50, 10, false);
+        trainer.train_by_steps(&mut agent, 200_000, UPDATE_FREQ, 50, 10);
     let elapsed = start.elapsed();
     println!("Elapsed time: {elapsed:?}");
     let rewards = r.unwrap().3;
@@ -136,6 +157,7 @@ pub fn test(env: Py<PyAny>) -> PyResult<f32> {
 #[pymodule]
 fn oxilearn(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add("__version__", "0.0.1")?;
+    m.add_class::<DQNAgent>()?;
     m.add_function(wrap_pyfunction!(test, m)?).unwrap();
     create_exception!(m, OxiLearnErr, PyException);
     Ok(())

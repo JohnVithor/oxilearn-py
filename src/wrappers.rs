@@ -1,110 +1,124 @@
-use crate::{dqn::DoubleDeepAgent, experience_buffer::RandomExperienceBuffer};
-use pyo3::{pyclass, pymethods};
-use tch::Device;
+use std::time::Instant;
+
+use crate::{
+    dqn::{DoubleDeepAgent, OptimizerEnum},
+    env::{PyEnv, SpaceInfo},
+    epsilon_greedy::{EpsilonGreedy, EpsilonUpdateStrategy},
+    experience_buffer::RandomExperienceBuffer,
+    generate_policy,
+    trainer::{TrainResults, Trainer},
+    OxiLearnErr,
+};
+use pyo3::{exceptions::PyTypeError, pyclass, pymethods, Py, PyAny, PyResult};
+use rand::{rngs::StdRng, RngCore, SeedableRng};
+use tch::{nn, Device};
 
 #[pyclass]
 pub struct DQNAgent {
-    agent: DoubleDeepAgent,
+    net_arch: Vec<(i64, String)>,
+    epsilon: f32,
+    epsilon_decay: f32,
+    memory_size: usize,
+    min_memory_size: usize,
+    lr: f64,
+    discount_factor: f32,
+    agent: Option<DoubleDeepAgent>,
 }
 
 #[pymethods]
 impl DQNAgent {
     #[new]
+    #[pyo3(signature = (net_arch, memory_size=5_000, min_memory_size=1_000, lr=0.0005, discount_factor=0.99, epsilon=1.0, epsilon_decay=0.0005))]
     fn new(
-        memory_size: Option<usize>,
-        min_memory_size: Option<usize>,
-        lr: Option<f64>,
-        discount_factor: Option<f32>,
-        device: Option<Device>,
+        net_arch: Vec<(i64, String)>,
+        memory_size: usize,
+        min_memory_size: usize,
+        lr: f64,
+        discount_factor: f32,
+        epsilon: f32,
+        epsilon_decay: f32,
     ) -> Self {
-        let mem_replay = RandomExperienceBuffer::new(
-            memory_size.unwrap_or(10_000),
-            min_memory_size.unwrap_or(1_000),
-            rng.next_u64(),
-            device.unwrap_or(Device::Cpu),
-        );
         Self {
-            agent: DoubleDeepAgent::new(
-                action_selector,
-                mem_replay,
-                generate_policy,
-                opt,
-                lr,
-                discount_factor,
-                device,
-            ),
+            net_arch,
+            epsilon,
+            epsilon_decay,
+            memory_size,
+            min_memory_size,
+            lr,
+            discount_factor,
+            agent: None,
         }
     }
 
-    pub fn train_by_steps2(
+    #[pyo3(signature = (env, steps=200_000, update_freq=10, eval_at=50, eval_for=10))]
+    pub fn train(
         &mut self,
-        // env: todo!(),
-        n_steps: u128,
+        env: Py<PyAny>,
+        steps: u128,
         update_freq: u128,
         eval_at: u128,
         eval_for: u128,
-        debug: bool,
-    ) {
-        // let mut training_reward: Vec<f32> = vec![];
-        // let mut training_length: Vec<u128> = vec![];
-        // let mut training_error: Vec<f32> = vec![];
-        // let mut evaluation_reward: Vec<f32> = vec![];
-        // let mut evaluation_length: Vec<f32> = vec![];
+    ) -> PyResult<f32> {
+        let mut rng: StdRng = StdRng::seed_from_u64(4);
 
-        // let mut n_episodes = 0;
-        // let mut action_counter: u128 = 0;
-        // let mut epi_reward: f32 = 0.0;
-        // let mut curr_obs: Tensor = (self.obs_to_repr)(&self.train_env.reset());
+        tch::manual_seed(rng.next_u64() as i64);
+        tch::maybe_init_cuda();
 
-        // for _ in 0..n_steps {
-        //     let curr_action = agent.get_action(&curr_obs);
+        let env = PyEnv::new(env)?;
 
-        //     let (next_obs, reward, terminated) = self
-        //         .train_env
-        //         .step((self.repr_to_action)(curr_action))
-        //         .unwrap();
-        //     let next_obs = (self.obs_to_repr)(&next_obs);
+        let input = match env.observation_space().unwrap() {
+            SpaceInfo::Discrete(_) => Err(PyTypeError::new_err("ambiente inválido")),
+            SpaceInfo::Continuous(s) => Ok(s.len()),
+        }? as i64;
+        let output = match env.action_space().unwrap() {
+            SpaceInfo::Discrete(n) => Ok(n),
+            SpaceInfo::Continuous(_) => Err(PyTypeError::new_err("ambiente inválido")),
+        }? as i64;
 
-        //     agent.add_transition(
-        //         &curr_obs,
-        //         curr_action,
-        //         reward,
-        //         terminated,
-        //         &next_obs,
-        //         curr_action, // HERE
-        //     );
+        let decay = self.epsilon_decay;
 
-        //     curr_obs = next_obs;
+        let mem_replay = RandomExperienceBuffer::new(
+            self.memory_size,
+            self.min_memory_size,
+            rng.next_u64(),
+            Device::Cpu,
+        );
 
-        //     if let Some(td) = agent.update() {
-        //         training_error.push(td)
-        //     }
+        let action_selector = EpsilonGreedy::new(
+            self.epsilon,
+            rng.next_u64(),
+            EpsilonUpdateStrategy::EpsilonDecreasing {
+                final_epsilon: 0.0,
+                epsilon_decay: Box::new(move |a| a - decay),
+            },
+        );
 
-        //     if terminated {
-        //         if debug {
-        //             println!("{}", self.train_env.render());
-        //         }
-        //         training_reward.push(epi_reward);
-        //         if n_episodes % update_freq == 0 && agent.update_networks().is_err() {
-        //             println!("copy error")
-        //         }
-        //         if n_episodes % eval_at == 0 {
-        //             let (rewards, eval_lengths) = self.evaluate(agent, eval_for);
-        //             let reward_avg = (rewards.iter().sum::<f32>()) / (rewards.len() as f32);
-        //             let eval_lengths_avg = (eval_lengths.iter().map(|x| *x as f32).sum::<f32>())
-        //                 / (eval_lengths.len() as f32);
-        //             println!("Episode: {}, Avg Return: {:.3} ", n_episodes, reward_avg,);
-        //             evaluation_reward.push(reward_avg);
-        //             evaluation_length.push(eval_lengths_avg);
-        //         }
-        //         curr_obs = (self.obs_to_repr)(&self.train_env.reset());
-        //         agent.action_selection_update(epi_reward);
+        let opt = OptimizerEnum::Adam(nn::Adam::default());
 
-        //         n_episodes += 1;
-        //         epi_reward = 0.0;
-        //         action_counter = 0;
-        //     }
-        //     training_length.push(action_counter);
-        // }
+        let mut agent = DoubleDeepAgent::new(
+            action_selector,
+            mem_replay,
+            generate_policy(self.net_arch.clone(), input, output),
+            opt,
+            self.lr,
+            self.discount_factor,
+            Device::Cpu,
+        );
+
+        let mut trainer = Trainer::new(env).unwrap();
+        trainer.early_stop = Some(Box::new(|reward| reward >= 500.0));
+
+        let start = Instant::now();
+
+        let r: Result<TrainResults, OxiLearnErr> =
+            trainer.train_by_steps(&mut agent, steps, update_freq, eval_at, eval_for);
+        let elapsed = start.elapsed();
+        println!("Elapsed time: {elapsed:?}");
+        let rewards = r.unwrap().3;
+        let reward_max = rewards
+            .iter()
+            .fold(rewards[0], |o, r| if *r > o { *r } else { o });
+        self.agent = Some(agent);
+        Ok(reward_max)
     }
 }
