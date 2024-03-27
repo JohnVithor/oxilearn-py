@@ -9,7 +9,7 @@ use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::time::Instant;
 use tch::{
     nn::{self, Module, VarStore},
-    Device, Kind,
+    Device, Kind, Tensor,
 };
 
 mod dqn;
@@ -40,42 +40,40 @@ pub enum OxiLearnErr {
 }
 
 type PolicyGenerator = dyn Fn(Device) -> (Box<dyn Module>, VarStore);
+type ActivationFunction = fn(&Tensor) -> Tensor;
 
 fn generate_policy(
-    net_arch: Vec<(i64, String)>,
+    net_arch: Vec<(i64, ActivationFunction)>,
+    last_activation: ActivationFunction,
     input: i64,
     output: i64,
 ) -> Result<Box<PolicyGenerator>, OxiLearnErr> {
-    let mut iter = net_arch.iter();
-    let previous = input;
-
-    let next;
-    if let Some(&(val, activation)) = iter.next() {
-        next = val;
-    }
     Ok(Box::new(
         move |device: Device| -> (Box<dyn Module>, VarStore) {
+            let iter = net_arch.clone().into_iter().enumerate();
+            let mut previous = input;
             let mem_policy = VarStore::new(device);
             let mut policy_net = nn::seq();
 
-            policy_net = policy_net.add(nn::linear(
-                &mem_policy.root() / "al1",
-                previous,
-                next,
-                Default::default(),
-            ));
-
-            let policy_net = policy_net
-                // .add_fn(|xs| xs.gelu("none"))
-                .add_fn(|xs| xs.tanh())
+            for (i, (neurons, activation)) in iter {
+                policy_net = policy_net
+                    .add(nn::linear(
+                        &mem_policy.root() / format!("layer {i}"),
+                        previous,
+                        neurons,
+                        Default::default(),
+                    ))
+                    .add_fn(activation);
+                previous = neurons;
+            }
+            policy_net = policy_net
                 .add(nn::linear(
-                    &mem_policy.root() / "al2",
-                    NEURONS,
+                    &mem_policy.root() / "output layer".to_string(),
+                    previous,
                     output,
                     Default::default(),
                 ))
-                .add_fn(|xs| xs.softmax(0, Kind::Float));
-            // for (size, activation) in net_arch {}
+                .add_fn(last_activation);
             (Box::new(policy_net), mem_policy)
         },
     ))
@@ -123,14 +121,25 @@ pub fn test(env: Py<PyAny>) -> PyResult<f32> {
         SpaceInfo::Continuous(_) => Err(PyTypeError::new_err("ambiente inválido")),
     }? as i64;
 
+    let net_arch = vec![(128, "relu".to_string()), (128, "softmax".to_string())];
+
+    let mut info: Vec<(i64, ActivationFunction)> = Vec::new();
+    for (n, activation) in net_arch {
+        let activation = match activation.as_str() {
+            "relu" => |xs: &Tensor| xs.relu(),
+            "gelu" => |xs: &Tensor| xs.gelu("none"),
+            "softmax" => |xs: &Tensor| xs.softmax(0, Kind::Float),
+            _ => return Err(PyTypeError::new_err(activation)),
+        };
+        info.push((n, activation))
+    }
+
+    let arch = generate_policy(info, |xs: &Tensor| xs.shallow_clone(), input, output).unwrap();
+
     let mut agent = DoubleDeepAgent::new(
         epsilon_greedy,
         mem_replay,
-        generate_policy(
-            vec![(128, "relu".to_string()), (128, "softmax".to_string())],
-            input,
-            output,
-        ),
+        arch,
         OptimizerEnum::Adam(nn::Adam::default()),
         LEARNING_RATE,
         GAMMA,

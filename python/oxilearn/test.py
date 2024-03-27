@@ -9,7 +9,7 @@ env = gym.make('CartPole-v1')
 
 #####################################
 
-agent = DQNAgent().train(env)
+agent = DQNAgent([(128, "relu")]).train(env)
 
 r = agent
 print(r)

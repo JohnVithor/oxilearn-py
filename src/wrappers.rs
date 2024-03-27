@@ -7,15 +7,16 @@ use crate::{
     experience_buffer::RandomExperienceBuffer,
     generate_policy,
     trainer::{TrainResults, Trainer},
-    OxiLearnErr,
+    ActivationFunction, OxiLearnErr,
 };
 use pyo3::{exceptions::PyTypeError, pyclass, pymethods, Py, PyAny, PyResult};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
-use tch::{nn, Device};
+use tch::{nn, Device, Kind, Tensor};
 
 #[pyclass]
 pub struct DQNAgent {
     net_arch: Vec<(i64, String)>,
+    last_activation: ActivationFunction,
     epsilon: f32,
     epsilon_decay: f32,
     memory_size: usize,
@@ -25,12 +26,24 @@ pub struct DQNAgent {
     agent: Option<DoubleDeepAgent>,
 }
 
+impl DQNAgent {
+    fn get_activation(id: &str) -> ActivationFunction {
+        match id {
+            "relu" => |xs: &Tensor| xs.relu(),
+            "gelu" => |xs: &Tensor| xs.gelu("none"),
+            "softmax" => |xs: &Tensor| xs.softmax(0, Kind::Float),
+            _ => |xs: &Tensor| xs.shallow_clone(),
+        }
+    }
+}
+
 #[pymethods]
 impl DQNAgent {
     #[new]
-    #[pyo3(signature = (net_arch, memory_size=5_000, min_memory_size=1_000, lr=0.0005, discount_factor=0.99, epsilon=1.0, epsilon_decay=0.0005))]
+    #[pyo3(signature = (net_arch, last_activation="none", memory_size=5_000, min_memory_size=1_000, lr=0.0005, discount_factor=0.99, epsilon=1.0, epsilon_decay=0.0005))]
     fn new(
         net_arch: Vec<(i64, String)>,
+        last_activation: &str,
         memory_size: usize,
         min_memory_size: usize,
         lr: f64,
@@ -40,6 +53,7 @@ impl DQNAgent {
     ) -> Self {
         Self {
             net_arch,
+            last_activation: DQNAgent::get_activation(last_activation),
             epsilon,
             epsilon_decay,
             memory_size,
@@ -95,10 +109,18 @@ impl DQNAgent {
 
         let opt = OptimizerEnum::Adam(nn::Adam::default());
 
+        let info = self
+            .net_arch
+            .iter()
+            .map(|(n, func)| (*n, Self::get_activation(func)))
+            .collect();
+
+        let arch = generate_policy(info, self.last_activation, input, output).unwrap();
+
         let mut agent = DoubleDeepAgent::new(
             action_selector,
             mem_replay,
-            generate_policy(self.net_arch.clone(), input, output),
+            arch,
             opt,
             self.lr,
             self.discount_factor,
