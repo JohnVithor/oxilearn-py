@@ -129,8 +129,8 @@ impl DoubleDeepAgent {
         self.action_selection.update(epi_reward);
     }
 
-    pub fn get_epsilon(&self) -> f32 {
-        self.action_selection.get_epsilon()
+    pub fn _get_epsilon(&self) -> f32 {
+        self.action_selection._get_epsilon()
     }
 
     pub fn reset(&mut self) {

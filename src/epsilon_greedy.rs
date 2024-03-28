@@ -92,7 +92,7 @@ impl EpsilonGreedy {
         }
     }
 
-    pub fn get_epsilon(&self) -> f32 {
+    pub fn _get_epsilon(&self) -> f32 {
         self.epsilon
     }
 

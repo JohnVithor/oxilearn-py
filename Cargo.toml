@@ -9,8 +9,11 @@ name = "oxilearn"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.20.3", features = ["extension-module"] }
-tch = { version = "0.15.0", features = ["python-extension"] }
-torch-sys = { version = "0.15.0", features = ["python-extension"] }
-rand = { version="0.8", features = ["small_rng"] }
+pyo3 = { version = "0.20", features = ["extension-module"] }
 numpy = "0.20"
+tch = { version = "0.15.0", features = ["python-extension"] }
+rand = { version="0.8", features = ["small_rng"] }
+send_wrapper = "0.6.0"
+
+[dev-dependencies]
+torch-sys = { version = "0.15.0", features = ["python-extension"] }
