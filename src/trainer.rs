@@ -1,5 +1,4 @@
 use pyo3::Python;
-use send_wrapper::SendWrapper;
 use tch::Tensor;
 
 use crate::{dqn::DoubleDeepAgent, env::PyEnv, OxiLearnErr};
@@ -12,18 +11,20 @@ pub struct Trainer {
 }
 
 impl Trainer {
-    pub fn new(env: PyEnv, py: Python<'_>) -> Result<Self, OxiLearnErr> {
-        if env.observation_space(py)?.is_discrete() {
-            // should be continuous
-            return Err(OxiLearnErr::EnvNotSupported);
-        }
-        if !env.action_space(py)?.is_discrete() {
-            // should be discrete
-            return Err(OxiLearnErr::EnvNotSupported);
-        }
-        Ok(Self {
-            env,
-            early_stop: None,
+    pub fn new(env: PyEnv) -> Result<Self, OxiLearnErr> {
+        Python::with_gil(|py| {
+            if env.observation_space(py)?.is_discrete() {
+                // should be continuous
+                return Err(OxiLearnErr::EnvNotSupported);
+            }
+            if !env.action_space(py)?.is_discrete() {
+                // should be discrete
+                return Err(OxiLearnErr::EnvNotSupported);
+            }
+            Ok(Self {
+                env,
+                early_stop: None,
+            })
         })
     }
 
@@ -34,9 +35,8 @@ impl Trainer {
         update_freq: u128,
         eval_at: u128,
         eval_for: u128,
-        py: Python<'_>,
     ) -> Result<TrainResults, OxiLearnErr> {
-        let mut curr_obs: Tensor = self.env.reset(py)?;
+        let mut curr_obs: Tensor = Python::with_gil(|py| self.env.reset(py))?;
         let mut training_reward: Vec<f32> = vec![];
         let mut training_length: Vec<u128> = vec![];
         let mut training_error: Vec<f32> = vec![];
@@ -46,25 +46,20 @@ impl Trainer {
         let mut n_episodes = 0;
         let mut action_counter: u128 = 0;
         let mut epi_reward: f32 = 0.0;
-        py.allow_threads(|| agent.reset());
+        agent.reset();
 
         for _ in 0..n_steps {
-            let curr_action = {
-                let wrapped = SendWrapper::new(&curr_obs);
-                py.allow_threads(|| agent.get_action(&wrapped))
-            };
-            let (next_obs, reward, done, truncated) = self.env.step(curr_action, py)?;
+            let curr_action = agent.get_action(&curr_obs);
+            let (next_obs, reward, done, truncated) =
+                Python::with_gil(|py| self.env.step(curr_action, py))?;
+            epi_reward += reward;
+            agent.add_transition(&curr_obs, curr_action, reward, done, &next_obs);
 
-            py.allow_threads(|| {
-                epi_reward += reward;
-                agent.add_transition(&curr_obs, curr_action, reward, done, &next_obs);
+            curr_obs = next_obs;
 
-                curr_obs = next_obs;
-
-                if let Some(td) = agent.update() {
-                    training_error.push(td)
-                }
-            });
+            if let Some(td) = agent.update() {
+                training_error.push(td)
+            }
 
             if done || truncated {
                 training_reward.push(epi_reward);
@@ -72,16 +67,10 @@ impl Trainer {
                     println!("copy error")
                 }
                 if n_episodes % eval_at == 0 {
-                    let (rewards, eval_lengths) = self.evaluate(agent, eval_for, py)?;
+                    let (rewards, eval_lengths) = self.evaluate(agent, eval_for)?;
                     let reward_avg = (rewards.iter().sum::<f32>()) / (rewards.len() as f32);
                     let eval_lengths_avg = (eval_lengths.iter().map(|x| *x as f32).sum::<f32>())
                         / (eval_lengths.len() as f32);
-                    // println!(
-                    //     "Episode: {}, Avg Return: {:.3} Current epsilon {:.3}",
-                    //     n_episodes,
-                    //     reward_avg,
-                    //     agent.get_epsilon()
-                    // );
                     evaluation_reward.push(reward_avg);
                     evaluation_length.push(eval_lengths_avg);
                     if let Some(s) = &self.early_stop {
@@ -90,7 +79,7 @@ impl Trainer {
                         };
                     }
                 }
-                curr_obs = self.env.reset(py)?;
+                curr_obs = Python::with_gil(|py| self.env.reset(py))?;
                 agent.action_selection_update(epi_reward);
                 n_episodes += 1;
                 epi_reward = 0.0;
@@ -111,18 +100,18 @@ impl Trainer {
         &mut self,
         agent: &mut DoubleDeepAgent,
         n_episodes: u128,
-        py: Python<'_>,
     ) -> Result<(Vec<f32>, Vec<u128>), OxiLearnErr> {
         let mut reward_history: Vec<f32> = vec![];
         let mut episode_length: Vec<u128> = vec![];
         for _episode in 0..n_episodes {
             let mut action_counter: u128 = 0;
             let mut epi_reward: f32 = 0.0;
-            let obs_repr = self.env.reset(py)?;
+            let obs_repr = Python::with_gil(|py| self.env.reset(py))?;
             let mut curr_action = agent.get_best_action(&obs_repr);
             loop {
                 action_counter += 1;
-                let (obs, reward, done, truncated) = self.env.step(curr_action, py)?;
+                let (obs, reward, done, truncated) =
+                    Python::with_gil(|py| self.env.step(curr_action, py))?;
                 let next_obs_repr = obs;
                 let next_action_repr: usize = agent.get_best_action(&next_obs_repr);
                 let next_action = next_action_repr;

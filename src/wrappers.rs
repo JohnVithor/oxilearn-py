@@ -134,18 +134,16 @@ impl DQNAgent {
             })
         };
 
-        let mut trainer = Trainer::new(env, py).unwrap();
-        trainer.early_stop = Some(Box::new(move |reward| reward >= solve_with));
-
-        let r: Result<TrainResults, OxiLearnErr> = trainer.train_by_steps(
-            self.agent.as_mut().unwrap(),
-            steps,
-            update_freq,
-            eval_at,
-            eval_for,
-            py,
-        );
         py.allow_threads(|| {
+            let mut trainer = Trainer::new(env).unwrap();
+            trainer.early_stop = Some(Box::new(move |reward| reward >= solve_with));
+            let r: Result<TrainResults, OxiLearnErr> = trainer.train_by_steps(
+                self.agent.as_mut().unwrap(),
+                steps,
+                update_freq,
+                eval_at,
+                eval_for,
+            );
             let rewards = r.unwrap().3;
             let reward_max = rewards
                 .iter()
