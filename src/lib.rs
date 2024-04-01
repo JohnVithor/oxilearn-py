@@ -1,5 +1,5 @@
 use pyo3::{
-    create_exception, exceptions::PyException, pymodule, types::PyModule, PyResult, Python,
+    create_exception, exceptions::PyException, pymodule, types::PyModule, Bound, PyResult, Python,
 };
 use tch::{
     nn::{self, Module, VarStore},
@@ -44,7 +44,7 @@ fn generate_policy(
             for (i, (neurons, activation)) in iter {
                 policy_net = policy_net
                     .add(nn::linear(
-                        &mem_policy.root() / format!("layer {i}"),
+                        &mem_policy.root() / format!("{}", i * 2),
                         previous,
                         neurons,
                         Default::default(),
@@ -54,7 +54,7 @@ fn generate_policy(
             }
             policy_net = policy_net
                 .add(nn::linear(
-                    &mem_policy.root() / "output layer".to_string(),
+                    &mem_policy.root() / format!("{}", net_arch.len() * 2),
                     previous,
                     output,
                     Default::default(),
@@ -67,7 +67,7 @@ fn generate_policy(
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn oxilearn(_py: Python, m: &PyModule) -> PyResult<()> {
+fn oxilearn(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("__version__", "0.0.1")?;
     m.add_class::<DQNAgent>()?;
     create_exception!(m, OxiLearnErr, PyException);

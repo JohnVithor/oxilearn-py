@@ -35,6 +35,7 @@ impl Trainer {
         update_freq: u128,
         eval_at: u128,
         eval_for: u128,
+        verbose: usize,
     ) -> Result<TrainResults, OxiLearnErr> {
         let mut curr_obs: Tensor = Python::with_gil(|py| self.env.reset(py))?;
         let mut training_reward: Vec<f32> = vec![];
@@ -71,6 +72,9 @@ impl Trainer {
                     let reward_avg = (rewards.iter().sum::<f32>()) / (rewards.len() as f32);
                     let eval_lengths_avg = (eval_lengths.iter().map(|x| *x as f32).sum::<f32>())
                         / (eval_lengths.len() as f32);
+                    if verbose > 0 {
+                        println!("episode: {n_episodes} - eval reward: {reward_avg}")
+                    }
                     evaluation_reward.push(reward_avg);
                     evaluation_length.push(eval_lengths_avg);
                     if let Some(s) = &self.early_stop {

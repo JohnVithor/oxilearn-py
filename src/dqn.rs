@@ -137,4 +137,20 @@ impl DoubleDeepAgent {
         self.action_selection.reset();
         // TODO: reset policies
     }
+
+    pub fn save_net(&self, path: &str) -> Result<(), TchError> {
+        self.policy_vs
+            .save(format!("{path}/policy_weights.safetensors"))?;
+        self.target_policy_vs
+            .save(format!("{path}/target_policy_weights.safetensors"))?;
+        Ok(())
+    }
+
+    pub fn load_net(&mut self, path: &str) -> Result<(), TchError> {
+        self.policy_vs
+            .load(format!("{path}/policy_weights.safetensors"))?;
+        self.target_policy_vs
+            .load(format!("{path}/target_policy_weights.safetensors"))?;
+        Ok(())
+    }
 }
