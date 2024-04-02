@@ -8,7 +8,7 @@ agent = DQNAgent([(128, "relu"), (128, "relu")])
 
 start = datetime.now()
 _ = env.reset(seed=seed)
-max_reward = agent.train(env, 500.0, steps=100, verbose=1)
+max_reward = agent.train(env, 500.0, steps=100_000, verbose=1)
 end = datetime.now()
 
 execution_time = end-start

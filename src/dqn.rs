@@ -45,8 +45,8 @@ impl DoubleDeepAgent {
         discount_factor: f32,
         device: Device,
     ) -> Self {
-        let (policy_net, mem_policy) = generate_policy(device);
-        let (target_net, mut mem_target) = generate_policy(device);
+        let (policy_net, mem_policy) = generate_policy("q_net", device);
+        let (target_net, mut mem_target) = generate_policy("q_net", device);
         mem_target.copy(&mem_policy).unwrap();
         Self {
             optimizer: opt.build(&mem_policy, lr).unwrap(),

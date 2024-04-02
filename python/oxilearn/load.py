@@ -6,7 +6,7 @@ env = gym.make('CartPole-v1')
 seed = 42
 agent = DQNAgent([(128, "relu"), (128, "relu")])
 agent.prepare(env)
-agent.load("./dqn")
+agent.load("./safetensors")
 
 start = datetime.now()
 _ = env.reset(seed=seed)
