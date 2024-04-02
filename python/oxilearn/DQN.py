@@ -41,8 +41,8 @@ def main():
                     policy_kwargs={'net_arch': [128, 128]})
         if os.path.exists('./safetensors'):
             print("safetensors loaded")
-            model.q_net.load_state_dict(load_file('/home/johnvithor/oxilearn/safetensors/policy_weights.safetensors'))
-            model.q_net_target.load_state_dict(load_file('/home/johnvithor/oxilearn/safetensors/target_policy_weights.safetensors'))
+            model.q_net.load_state_dict(load_file('./safetensors/policy_weights.safetensors'))
+            model.q_net_target.load_state_dict(load_file('./safetensors/target_policy_weights.safetensors'))
     
     mean_reward, std_reward = evaluate_policy(
             model, eval_env, n_eval_episodes=eval_size)
