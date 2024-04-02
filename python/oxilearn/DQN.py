@@ -10,8 +10,23 @@ from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewar
 from datetime import datetime
 from safetensors.torch import load_file
 
+import torch 
+import numpy as np
+import random
+import os
+
+
 def main():
-    train_steps = 50_000 if len(sys.argv) == 1 else int(sys.argv[1])
+     
+    seed = 42 
+    os.environ['PYTHONASHSEED'] = f'{seed}' 
+    torch.manual_seed(seed)
+    torch.use_deterministic_algorithms(True)
+    np.random.seed(seed)
+    random.seed(seed)
+
+
+    train_steps = 100_000 if len(sys.argv) == 1 else int(sys.argv[1])
     output = {'train_steps': train_steps}
 
     env_id = "CartPole-v1"
@@ -34,10 +49,10 @@ def main():
         model.set_env(vec_env)
         print("model loaded")
     else:
-        model = DQN(policy="MlpPolicy", env=vec_env, learning_rate=2.3e-3, batch_size=64,
-                    buffer_size=100_000, learning_starts=1_000, gamma=0.99,
+        model = DQN(policy="MlpPolicy", env=vec_env, learning_rate=0.0005, batch_size=32,
+                    buffer_size=5_000, learning_starts=1_000, gamma=0.99,
                     target_update_interval=10, train_freq=256, gradient_steps=128,
-                    exploration_fraction=0.16, exploration_final_eps=0.04,
+                    exploration_fraction=0.16, exploration_final_eps=0.00,
                     policy_kwargs={'net_arch': [128, 128]})
         if os.path.exists('./safetensors'):
             print("safetensors loaded")
@@ -51,7 +66,7 @@ def main():
         'std_reward': std_reward
     }
 
-    callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=475, verbose=1)
+    callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=500, verbose=1)
     eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, eval_freq=callback_freq, verbose=1)
 
     model.learn(total_timesteps=train_steps, callback=[eval_callback])

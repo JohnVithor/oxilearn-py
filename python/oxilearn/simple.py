@@ -5,6 +5,8 @@ import gymnasium as gym
 env = gym.make('CartPole-v1')
 seed = 42
 agent = DQNAgent([(128, "relu"), (128, "relu")])
+agent.prepare(env)
+agent.load("./safetensors")
 
 start = datetime.now()
 _ = env.reset(seed=seed)
@@ -14,6 +16,5 @@ end = datetime.now()
 execution_time = end-start
 print(f" {max_reward}, {execution_time}")
 
-agent.save("./safetensors")
 
 
