@@ -1,6 +1,7 @@
 use crate::{
     epsilon_greedy::EpsilonGreedy, experience_buffer::RandomExperienceBuffer, PolicyGenerator,
 };
+use std::fs;
 use tch::{
     nn::{Adam, AdamW, Module, Optimizer, OptimizerConfig, RmsProp, Sgd, VarStore},
     COptimizer, Device, Kind, TchError, Tensor,
@@ -139,6 +140,7 @@ impl DoubleDeepAgent {
     }
 
     pub fn save_net(&self, path: &str) -> Result<(), TchError> {
+        fs::create_dir_all(path)?;
         self.policy_vs
             .save(format!("{path}/policy_weights.safetensors"))?;
         self.target_policy_vs

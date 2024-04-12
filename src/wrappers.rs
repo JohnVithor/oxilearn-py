@@ -179,7 +179,7 @@ impl DQNAgent {
         eval_for: u128,
         verbose: usize,
         py: Python<'_>,
-    ) -> PyResult<f32> {
+    ) -> PyResult<(f32, f32)> {
         let env = PyEnv::new(env)?;
         if self.agent.is_none() {
             self.create_agent(&env, py)?;
@@ -197,10 +197,47 @@ impl DQNAgent {
                 verbose,
             );
             let rewards = r.unwrap().3;
-            let reward_max = rewards
+            let reward_avg = (rewards.iter().sum::<f32>()) / (rewards.len() as f32);
+            let variance = rewards
                 .iter()
-                .fold(rewards[0], |o, r| if *r > o { *r } else { o });
-            Ok(reward_max)
+                .map(|value| {
+                    let diff = reward_avg - *value;
+                    diff * diff
+                })
+                .sum::<f32>()
+                / rewards.len() as f32;
+
+            Ok((reward_avg, variance.sqrt()))
+        })
+    }
+
+    #[pyo3(signature = (env, n_eval_episodes))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn evaluate(
+        &mut self,
+        env: Bound<PyAny>,
+        n_eval_episodes: u128,
+        py: Python<'_>,
+    ) -> PyResult<(f32, f32)> {
+        let env = PyEnv::new(env)?;
+        if self.agent.is_none() {
+            self.create_agent(&env, py)?;
+        }
+
+        py.allow_threads(|| {
+            let mut trainer = Trainer::new(env).unwrap();
+            let r = trainer.evaluate(self.agent.as_mut().unwrap(), n_eval_episodes);
+            let rewards = r.unwrap().0;
+            let reward_avg = (rewards.iter().sum::<f32>()) / (rewards.len() as f32);
+            let variance = rewards
+                .iter()
+                .map(|value| {
+                    let diff = reward_avg - *value;
+                    diff * diff
+                })
+                .sum::<f32>()
+                / rewards.len() as f32;
+            Ok((reward_avg, variance.sqrt()))
         })
     }
 }
