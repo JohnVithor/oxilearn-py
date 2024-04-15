@@ -10,9 +10,3 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
 ]
 dynamic = ["version"]
-dependencies = ["gymnasium>=0.29.0", "torch==2.2.0"]
-
-[tool.maturin]
-python-source = "python"
-module-name = "oxilearn.oxilearn"
-features = ["pyo3/extension-module"]
