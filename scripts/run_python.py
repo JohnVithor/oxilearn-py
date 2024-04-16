@@ -8,11 +8,10 @@ from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
-from datetime import datetime
 from safetensors.torch import load_file, save_file
 
 
-def main(seed, save):
+def main(seed, save, verbose):
     eval_size = 10
     callback_freq = 1_000
 
@@ -28,14 +27,10 @@ def main(seed, save):
         model.q_net.load_state_dict(load_file('./safetensors/policy_weights.safetensors'))
         model.q_net_target.load_state_dict(load_file('./safetensors/target_policy_weights.safetensors'))
     
-    callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=500, verbose=0)
-    eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, eval_freq=callback_freq, verbose=0)
+    callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=vec_env.get_attr("spec")[0].reward_threshold, verbose=verbose)
+    eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, eval_freq=callback_freq, verbose=verbose)
 
-    start = datetime.now()
     model.learn(total_timesteps=1_000_000, callback=[eval_callback])
-    end = datetime.now()
-
-    print(f"{end-start}", end=" ")
 
     if save:
         os.mkdir('./safetensors-python') 
@@ -46,14 +41,14 @@ def main(seed, save):
 
 if __name__ == '__main__':
     seed = int(sys.argv[1]) if len(sys.argv) > 1 else 0
-    save = bool(sys.argv[2]) if len(sys.argv) > 2 else False
+    save = sys.argv[2].lower() == "true" if len(sys.argv) > 2 else False
+    verbose = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 
     os.environ['PYTHONASHSEED'] = f'{seed}' 
     torch.manual_seed(seed)
-    torch.use_deterministic_algorithms(True)
     np.random.seed(seed)
     random.seed(seed)
 
-    reward_info = main(seed, save)
+    reward_info = main(seed, save, verbose)
     print(f"{reward_info}")
 
