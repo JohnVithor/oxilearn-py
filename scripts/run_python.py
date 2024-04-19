@@ -23,9 +23,9 @@ def main(seed, save, verbose):
                 target_update_interval=10, train_freq=256, gradient_steps=128,
                 exploration_initial_eps=1.00, exploration_fraction=0.16, exploration_final_eps=0.04,
                 policy_kwargs={'net_arch': [256, 256]})
-    if os.path.exists('./safetensors'):
-        model.q_net.load_state_dict(load_file('./safetensors/policy_weights.safetensors'))
-        model.q_net_target.load_state_dict(load_file('./safetensors/target_policy_weights.safetensors'))
+    # if os.path.exists('./safetensors'):
+    #     model.q_net.load_state_dict(load_file('./safetensors/policy_weights.safetensors'))
+    #     model.q_net_target.load_state_dict(load_file('./safetensors/target_policy_weights.safetensors'))
     
     callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=vec_env.get_attr("spec")[0].reward_threshold, verbose=verbose)
     eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, eval_freq=callback_freq, verbose=verbose)
@@ -49,6 +49,6 @@ if __name__ == '__main__':
     np.random.seed(seed)
     random.seed(seed)
 
-    reward_info = main(seed, save, verbose)
-    print(f"{reward_info}")
+    reward, std = main(seed, save, verbose)
+    print(f"python,{seed},{reward},{std}")
 
