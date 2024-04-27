@@ -12,15 +12,15 @@ def main(seed, save, verbose):
     env = gym.make('CartPole-v1')
     agent = DQNAgent([(256, "relu"), (256, "relu")])
     agent.prepare(env)
-    # agent.load("./safetensors")
     env.reset(seed=seed)
 
-    agent.train(env, env.spec.reward_threshold, steps=1_000_000, verbose=verbose)
+    results = agent.train(env, env.spec.reward_threshold, steps=1_000_000, verbose=verbose)
+    training_steps = sum(results[1])
     
     if save:
         agent.save("./safetensors-rust")
 
-    return agent.evaluate(env, 10)
+    return training_steps, agent.evaluate(env, 10)
 
 if __name__ == '__main__':
     seed = int(sys.argv[1]) if len(sys.argv) > 1 else 0
@@ -32,7 +32,7 @@ if __name__ == '__main__':
     np.random.seed(seed)
     random.seed(seed)
 
-    reward, std = main(seed, save, verbose)
-    print(f"rust,{seed},{reward},{std}")
+    training_steps, (reward, std) = main(seed, save, verbose)
+    print(f"rust,{seed},{training_steps},{reward},{std}")
 
 

@@ -44,12 +44,13 @@ impl Trainer {
         let mut evaluation_reward: Vec<f32> = vec![];
         let mut evaluation_length: Vec<f32> = vec![];
 
-        let mut n_episodes = 0;
+        let mut n_episodes = 1;
         let mut action_counter: u128 = 0;
         let mut epi_reward: f32 = 0.0;
         agent.reset();
 
-        for _ in 0..n_steps {
+        for step in 0..n_steps {
+            action_counter += 1;
             let curr_action = agent.get_action(&curr_obs);
             let (next_obs, reward, done, truncated) =
                 Python::with_gil(|py| self.env.step(curr_action, py))?;
@@ -64,6 +65,7 @@ impl Trainer {
 
             if done || truncated {
                 training_reward.push(epi_reward);
+                training_length.push(action_counter);
                 if n_episodes % update_freq == 0 && agent.update_networks().is_err() {
                     println!("copy error")
                 }
@@ -73,7 +75,9 @@ impl Trainer {
                     let eval_lengths_avg = (eval_lengths.iter().map(|x| *x as f32).sum::<f32>())
                         / (eval_lengths.len() as f32);
                     if verbose > 0 {
-                        println!("episode: {n_episodes} - eval reward: {reward_avg}")
+                        println!(
+                            "episode: {n_episodes} - eval reward: {reward_avg} - steps number: {step}"
+                        )
                     }
                     evaluation_reward.push(reward_avg);
                     evaluation_length.push(eval_lengths_avg);
@@ -89,7 +93,6 @@ impl Trainer {
                 epi_reward = 0.0;
                 action_counter = 0;
             }
-            training_length.push(action_counter);
         }
         Ok((
             training_reward,

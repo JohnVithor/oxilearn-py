@@ -37,7 +37,7 @@ def main(seed, save, verbose):
         save_file(model.q_net.state_dict(), './safetensors-python/policy_weights.safetensors')
         save_file(model.q_net_target.state_dict(), './safetensors-python/target_policy_weights.safetensors')
 
-    return evaluate_policy(model, eval_env, n_eval_episodes=eval_size)
+    return model.num_timesteps, evaluate_policy(model, eval_env, n_eval_episodes=eval_size)
 
 if __name__ == '__main__':
     seed = int(sys.argv[1]) if len(sys.argv) > 1 else 0
@@ -49,6 +49,6 @@ if __name__ == '__main__':
     np.random.seed(seed)
     random.seed(seed)
 
-    reward, std = main(seed, save, verbose)
-    print(f"python,{seed},{reward},{std}")
+    training_steps, (reward, std) = main(seed, save, verbose)
+    print(f"python,{seed},{training_steps},{reward},{std}")
 

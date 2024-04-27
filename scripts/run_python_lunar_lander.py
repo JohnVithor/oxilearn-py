@@ -19,9 +19,9 @@ def main(seed, save, verbose):
     eval_env = make_vec_env("LunarLander-v2", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv)
 
     model = DQN(policy="MlpPolicy", env=vec_env, learning_rate=6.3e-4, batch_size=128,
-                buffer_size=50_000, learning_starts=0, gamma=0.99,
-                target_update_interval=250, train_freq=4, gradient_steps=-1,
-                exploration_initial_eps=1.00, exploration_fraction=0.12, exploration_final_eps=0.1,
+                buffer_size=100_000, learning_starts=1000, gamma=0.99,
+                target_update_interval=10, train_freq=128, gradient_steps=128,
+                exploration_initial_eps=1.00, exploration_fraction=0.5, exploration_final_eps=0.04,
                 policy_kwargs={'net_arch': [256, 256]})
     # if os.path.exists('./safetensors'):
     #     model.q_net.load_state_dict(load_file('./safetensors/policy_weights.safetensors'))
@@ -37,7 +37,7 @@ def main(seed, save, verbose):
         save_file(model.q_net.state_dict(), './safetensors-python/policy_weights.safetensors')
         save_file(model.q_net_target.state_dict(), './safetensors-python/target_policy_weights.safetensors')
 
-    return evaluate_policy(model, eval_env, n_eval_episodes=eval_size)
+    return model.num_timesteps, evaluate_policy(model, eval_env, n_eval_episodes=eval_size)
 
 if __name__ == '__main__':
     seed = int(sys.argv[1]) if len(sys.argv) > 1 else 0
@@ -49,6 +49,6 @@ if __name__ == '__main__':
     np.random.seed(seed)
     random.seed(seed)
 
-    reward, std = main(seed, save, verbose)
-    print(f"python,{seed},{reward},{std}")
+    training_steps, (reward, std) = main(seed, save, verbose)
+    print(f"python,{seed},{training_steps},{reward},{std}")
 
