@@ -18,12 +18,14 @@ use tch::{nn, Device, Kind, Tensor};
 pub struct DQNAgent {
     net_arch: Vec<(i64, String)>,
     last_activation: ActivationFunction,
-    epsilon: f32,
-    epsilon_decay: f32,
+    initial_epsilon: f32,
+    final_epsilon: f32,
+    exploration_fraction: f32,
     memory_size: usize,
     min_memory_size: usize,
     lr: f64,
     discount_factor: f32,
+    max_grad_norm: f64,
     agent: Option<DoubleDeepAgent>,
     rng: SmallRng,
 }
@@ -34,6 +36,7 @@ impl DQNAgent {
             "relu" => |xs: &Tensor| xs.relu(),
             "gelu" => |xs: &Tensor| xs.gelu("none"),
             "softmax" => |xs: &Tensor| xs.softmax(0, Kind::Float),
+            "tanh" => |xs: &Tensor| xs.tanh(),
             _ => |xs: &Tensor| xs.shallow_clone(),
         }
     }
@@ -49,10 +52,12 @@ impl DQNAgent {
         min_memory_size=1_000,
         lr=0.0005,
         discount_factor=0.99,
-        epsilon=1.0,
-        epsilon_decay=0.0005,
-        seed=0)
-    )]
+        initial_epsilon=1.0,
+        final_epsilon=0.05,
+        exploration_fraction=0.05,
+        max_grad_norm=10.0,
+        seed=0
+    ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         net_arch: Vec<(i64, String)>,
@@ -61,8 +66,10 @@ impl DQNAgent {
         min_memory_size: usize,
         lr: f64,
         discount_factor: f32,
-        epsilon: f32,
-        epsilon_decay: f32,
+        initial_epsilon: f32,
+        final_epsilon: f32,
+        exploration_fraction: f32,
+        max_grad_norm: f64,
         seed: u64,
     ) -> Self {
         let mut rng: SmallRng = SmallRng::seed_from_u64(seed);
@@ -71,12 +78,14 @@ impl DQNAgent {
         Self {
             net_arch,
             last_activation: DQNAgent::get_activation(last_activation),
-            epsilon,
-            epsilon_decay,
+            initial_epsilon,
+            final_epsilon,
+            exploration_fraction,
             memory_size,
             min_memory_size,
             lr,
             discount_factor,
+            max_grad_norm,
             agent: None,
             rng,
         }
@@ -135,13 +144,13 @@ impl DQNAgent {
                 Device::Cpu,
             );
 
-            let decay = self.epsilon_decay;
             let action_selector = EpsilonGreedy::new(
-                self.epsilon,
+                self.initial_epsilon,
                 self.rng.next_u64(),
-                EpsilonUpdateStrategy::EpsilonDecreasing {
-                    final_epsilon: 0.0,
-                    epsilon_decay: Box::new(move |a| a - decay),
+                EpsilonUpdateStrategy::EpsilonLinearTrainingDecreasing {
+                    start: self.initial_epsilon,
+                    end: self.final_epsilon,
+                    end_fraction: self.exploration_fraction,
                 },
             );
 
@@ -161,6 +170,7 @@ impl DQNAgent {
                 opt,
                 self.lr,
                 self.discount_factor,
+                self.max_grad_norm,
                 Device::Cpu,
             ))
         });

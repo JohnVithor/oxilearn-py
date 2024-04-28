@@ -34,9 +34,11 @@ pub struct DoubleDeepAgent {
     pub optimizer: Optimizer,
     pub memory: RandomExperienceBuffer,
     pub discount_factor: f32,
+    pub max_grad_norm: f64,
 }
 
 impl DoubleDeepAgent {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         action_selector: EpsilonGreedy,
         mem_replay: RandomExperienceBuffer,
@@ -44,6 +46,7 @@ impl DoubleDeepAgent {
         opt: OptimizerEnum,
         lr: f64,
         discount_factor: f32,
+        max_grad_norm: f64,
         device: Device,
     ) -> Self {
         let (policy_net, mem_policy) = generate_policy("q_net", device);
@@ -57,6 +60,7 @@ impl DoubleDeepAgent {
             policy_vs: mem_policy,
             target_policy: target_net,
             target_policy_vs: mem_target,
+            max_grad_norm,
             discount_factor,
         }
     }
@@ -110,6 +114,7 @@ impl DoubleDeepAgent {
     pub fn optimize(&mut self, loss: Tensor) {
         self.optimizer.zero_grad();
         loss.backward();
+        self.optimizer.clip_grad_norm(self.max_grad_norm);
         self.optimizer.step();
     }
 
@@ -118,7 +123,8 @@ impl DoubleDeepAgent {
             let (b_state, b_action, b_reward, b_done, b_state_) = self.get_batch(32);
             let policy_qvalues = self.batch_qvalues(&b_state, &b_action);
             let expected_values = self.batch_expected_values(&b_state_, &b_reward, &b_done);
-            let loss = policy_qvalues.mse_loss(&expected_values, tch::Reduction::Mean);
+            // let loss = policy_qvalues.mse_loss(&expected_values, tch::Reduction::Mean);
+            let loss = policy_qvalues.smooth_l1_loss(&expected_values, tch::Reduction::Mean, 1.0);
             self.optimize(loss);
             Some(expected_values.mean(Kind::Float).try_into().unwrap())
         } else {
@@ -126,12 +132,13 @@ impl DoubleDeepAgent {
         }
     }
 
-    pub fn action_selection_update(&mut self, epi_reward: f32) {
-        self.action_selection.update(epi_reward);
+    pub fn action_selection_update(&mut self, current_training_progress: f32, epi_reward: f32) {
+        self.action_selection
+            .update(current_training_progress, epi_reward);
     }
 
-    pub fn _get_epsilon(&self) -> f32 {
-        self.action_selection._get_epsilon()
+    pub fn get_epsilon(&self) -> f32 {
+        self.action_selection.get_epsilon()
     }
 
     pub fn reset(&mut self) {

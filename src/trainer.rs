@@ -76,7 +76,8 @@ impl Trainer {
                         / (eval_lengths.len() as f32);
                     if verbose > 0 {
                         println!(
-                            "episode: {n_episodes} - eval reward: {reward_avg} - steps number: {step}"
+                            "episode: {n_episodes} - eval reward: {reward_avg} - steps number: {step} - epsilon: {}",
+                            agent.get_epsilon()
                         )
                     }
                     evaluation_reward.push(reward_avg);
@@ -88,7 +89,7 @@ impl Trainer {
                     }
                 }
                 curr_obs = Python::with_gil(|py| self.env.reset(py))?;
-                agent.action_selection_update(epi_reward);
+                agent.action_selection_update(step as f32 / n_steps as f32, epi_reward);
                 n_episodes += 1;
                 epi_reward = 0.0;
                 action_counter = 0;

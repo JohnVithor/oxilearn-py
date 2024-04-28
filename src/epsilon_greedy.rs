@@ -2,24 +2,34 @@ use rand::{rngs::SmallRng, Rng, SeedableRng};
 use tch::Tensor;
 
 pub enum EpsilonUpdateStrategy {
-    _AdaptativeEpsilon {
+    AdaptativeEpsilon {
         min_epsilon: f32,
         max_epsilon: f32,
         min_reward: f32,
         max_reward: f32,
         eps_range: f32,
     },
-    EpsilonDecreasing {
+    EpsilonCustomDecreasing {
         final_epsilon: f32,
         epsilon_decay: Box<dyn Fn(f32) -> f32 + Send + Sync>,
+    },
+    EpsilonLinearTrainingDecreasing {
+        start: f32,
+        end: f32,
+        end_fraction: f32,
     },
     None,
 }
 
 impl EpsilonUpdateStrategy {
-    fn update(&mut self, current_epsilon: f32, epi_reward: f32) -> f32 {
+    fn update(
+        &mut self,
+        current_epsilon: f32,
+        current_training_progress: f32,
+        epi_reward: f32,
+    ) -> f32 {
         match self {
-            EpsilonUpdateStrategy::_AdaptativeEpsilon {
+            EpsilonUpdateStrategy::AdaptativeEpsilon {
                 min_epsilon,
                 max_epsilon,
                 min_reward,
@@ -39,7 +49,7 @@ impl EpsilonUpdateStrategy {
                     }
                 }
             }
-            EpsilonUpdateStrategy::EpsilonDecreasing {
+            EpsilonUpdateStrategy::EpsilonCustomDecreasing {
                 final_epsilon,
                 epsilon_decay,
             } => {
@@ -51,6 +61,17 @@ impl EpsilonUpdateStrategy {
                     new_epsilon
                 }
             }
+            EpsilonUpdateStrategy::EpsilonLinearTrainingDecreasing {
+                start,
+                end,
+                end_fraction,
+            } => {
+                if current_training_progress > *end_fraction {
+                    *end
+                } else {
+                    *start + current_training_progress * (*end - *start) / *end_fraction
+                }
+            }
             EpsilonUpdateStrategy::None => current_epsilon,
         }
     }
@@ -58,7 +79,7 @@ impl EpsilonUpdateStrategy {
 
 pub struct EpsilonGreedy {
     initial_epsilon: f32,
-    epsilon: f32,
+    current_epsilon: f32,
     rng: SmallRng,
     update_strategy: EpsilonUpdateStrategy,
 }
@@ -73,14 +94,14 @@ impl EpsilonGreedy {
     pub fn new(epsilon: f32, seed: u64, update_strategy: EpsilonUpdateStrategy) -> Self {
         Self {
             initial_epsilon: epsilon,
-            epsilon,
+            current_epsilon: epsilon,
             rng: SmallRng::seed_from_u64(seed),
             update_strategy,
         }
     }
 
     pub fn should_explore(&mut self) -> bool {
-        self.epsilon != 0.0 && self.rng.gen_range(0.0..1.0) <= self.epsilon
+        self.current_epsilon != 0.0 && self.rng.gen_range(0.0..1.0) <= self.current_epsilon
     }
 
     pub fn get_action(&mut self, values: &Tensor) -> usize {
@@ -92,15 +113,17 @@ impl EpsilonGreedy {
         }
     }
 
-    pub fn _get_epsilon(&self) -> f32 {
-        self.epsilon
+    pub fn get_epsilon(&self) -> f32 {
+        self.current_epsilon
     }
 
     pub fn reset(&mut self) {
-        self.epsilon = self.initial_epsilon;
+        self.current_epsilon = self.initial_epsilon;
     }
 
-    pub fn update(&mut self, epi_reward: f32) {
-        self.epsilon = self.update_strategy.update(self.epsilon, epi_reward)
+    pub fn update(&mut self, current_training_progress: f32, epi_reward: f32) {
+        self.current_epsilon =
+            self.update_strategy
+                .update(self.current_epsilon, current_training_progress, epi_reward)
     }
 }
