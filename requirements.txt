@@ -4,3 +4,4 @@ safetensors==0.4.2
 maturin==1.5.1
 numpy==1.26.0
 stable_baselines3==2.3.0
+optuna==3.6.1
