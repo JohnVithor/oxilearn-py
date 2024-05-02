@@ -1,5 +1,5 @@
 use crate::{
-    dqn::{DoubleDeepAgent, OptimizerEnum},
+    dqn::{huber, mae, mse, rmse, smooth_l1, DoubleDeepAgent, OptimizerEnum},
     env::{PyEnv, SpaceInfo},
     epsilon_greedy::{EpsilonGreedy, EpsilonUpdateStrategy},
     experience_buffer::RandomExperienceBuffer,
@@ -12,7 +12,10 @@ use pyo3::{
     pyclass, pymethods, Bound, PyAny, PyResult, Python,
 };
 use rand::{rngs::SmallRng, RngCore, SeedableRng};
-use tch::{nn, Device, Kind, Tensor};
+use tch::{
+    nn::{Adam, AdamW, RmsProp, Sgd},
+    Device, Kind, Tensor,
+};
 
 #[pyclass]
 pub struct DQNAgent {
@@ -28,6 +31,8 @@ pub struct DQNAgent {
     max_grad_norm: f64,
     agent: Option<DoubleDeepAgent>,
     rng: SmallRng,
+    optimizer: OptimizerEnum,
+    loss_fn: fn(&Tensor, &Tensor) -> Tensor,
 }
 
 impl DQNAgent {
@@ -44,6 +49,7 @@ impl DQNAgent {
 
 #[pymethods]
 impl DQNAgent {
+    /// Create a new DQNAgent
     #[new]
     #[pyo3(signature = (
         net_arch,
@@ -56,7 +62,10 @@ impl DQNAgent {
         final_epsilon=0.05,
         exploration_fraction=0.05,
         max_grad_norm=10.0,
-        seed=0
+        seed=0,
+        optimizer="Adam",
+        // optimizer_info=HashMap::default(),
+        loss_fn="Huber"
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -71,11 +80,44 @@ impl DQNAgent {
         exploration_fraction: f32,
         max_grad_norm: f64,
         seed: u64,
-    ) -> Self {
+        optimizer: &str,
+        // optimizer_info: HashMap<String, String>,
+        loss_fn: &str,
+    ) -> PyResult<Self> {
         let mut rng: SmallRng = SmallRng::seed_from_u64(seed);
         tch::manual_seed(rng.next_u64() as i64);
         tch::maybe_init_cuda();
-        Self {
+
+        let optimizer_info = match optimizer {
+            "Adam" => Some(OptimizerEnum::Adam(Adam::default())),
+            "Sgd" => Some(OptimizerEnum::Sgd(Sgd::default())),
+            "RmsProp" => Some(OptimizerEnum::RmsProp(RmsProp::default())),
+            "AdamW" => Some(OptimizerEnum::AdamW(AdamW::default())),
+            _ => None,
+        };
+
+        let Some(optimizer) = optimizer_info else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid optimizer option '{optimizer}' valid options are: 'Adam', 'Sgd', 'RmsProp' and 'AdamW'"
+            )));
+        };
+
+        let loss_fn_info: Option<fn(&Tensor, &Tensor) -> Tensor> = match loss_fn {
+            "MAE" => Some(mae),
+            "MSE" => Some(mse),
+            "RMSE" => Some(rmse),
+            "Huber" => Some(huber),
+            "smooth_l1" => Some(smooth_l1),
+            _ => None,
+        };
+
+        let Some(loss_fn) = loss_fn_info else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid loss_fn option '{loss_fn}' valid options are: 'MAE','MSE', 'RMSE', 'Huber' and smooth_l1"
+            )));
+        };
+
+        Ok(Self {
             net_arch,
             last_activation: DQNAgent::get_activation(last_activation),
             initial_epsilon,
@@ -88,7 +130,9 @@ impl DQNAgent {
             max_grad_norm,
             agent: None,
             rng,
-        }
+            optimizer,
+            loss_fn,
+        })
     }
 
     #[pyo3(signature = ())]
@@ -154,8 +198,6 @@ impl DQNAgent {
                 },
             );
 
-            let opt = OptimizerEnum::Adam(nn::Adam::default());
-
             let info = self
                 .net_arch
                 .iter()
@@ -167,7 +209,8 @@ impl DQNAgent {
                 action_selector,
                 mem_replay,
                 arch,
-                opt,
+                self.optimizer,
+                self.loss_fn,
                 self.lr,
                 self.discount_factor,
                 self.max_grad_norm,

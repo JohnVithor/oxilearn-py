@@ -6,11 +6,11 @@ import numpy as np
 import random
 from oxilearn import DQNAgent
 
-
 def main(seed, save, verbose):
 
     env = gym.make('CartPole-v1')
-    agent = DQNAgent([(256, "relu"), (256, "relu")])
+
+    agent = DQNAgent([(256, "relu"), (256, "relu")], loss_fn='MAE')
     agent.prepare(env)
     env.reset(seed=seed)
 

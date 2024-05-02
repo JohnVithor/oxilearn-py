@@ -7,20 +7,43 @@ use tch::{
     COptimizer, Device, Kind, TchError, Tensor,
 };
 
+pub fn mae(values: &Tensor, expected_values: &Tensor) -> Tensor {
+    values.l1_loss(expected_values, tch::Reduction::Mean)
+}
+
+pub fn mse(values: &Tensor, expected_values: &Tensor) -> Tensor {
+    values.mse_loss(expected_values, tch::Reduction::Mean)
+}
+
+pub fn rmse(values: &Tensor, expected_values: &Tensor) -> Tensor {
+    values
+        .mse_loss(expected_values, tch::Reduction::Mean)
+        .sqrt()
+}
+
+pub fn huber(values: &Tensor, expected_values: &Tensor) -> Tensor {
+    values.huber_loss(expected_values, tch::Reduction::Mean, 1.35)
+}
+
+pub fn smooth_l1(values: &Tensor, expected_values: &Tensor) -> Tensor {
+    values.smooth_l1_loss(expected_values, tch::Reduction::Mean, 1.0 / 9.0)
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum OptimizerEnum {
     Adam(Adam),
-    _Sgd(Sgd),
-    _RmsProp(RmsProp),
-    _AdamW(AdamW),
+    Sgd(Sgd),
+    RmsProp(RmsProp),
+    AdamW(AdamW),
 }
 
 impl OptimizerConfig for OptimizerEnum {
     fn build_copt(&self, lr: f64) -> Result<COptimizer, TchError> {
         match self {
             OptimizerEnum::Adam(opt) => opt.build_copt(lr),
-            OptimizerEnum::_Sgd(opt) => opt.build_copt(lr),
-            OptimizerEnum::_RmsProp(opt) => opt.build_copt(lr),
-            OptimizerEnum::_AdamW(opt) => opt.build_copt(lr),
+            OptimizerEnum::Sgd(opt) => opt.build_copt(lr),
+            OptimizerEnum::RmsProp(opt) => opt.build_copt(lr),
+            OptimizerEnum::AdamW(opt) => opt.build_copt(lr),
         }
     }
 }
@@ -32,6 +55,7 @@ pub struct DoubleDeepAgent {
     pub policy_vs: VarStore,
     pub target_policy_vs: VarStore,
     pub optimizer: Optimizer,
+    pub loss_fn: fn(&Tensor, &Tensor) -> Tensor,
     pub memory: RandomExperienceBuffer,
     pub discount_factor: f32,
     pub max_grad_norm: f64,
@@ -44,6 +68,7 @@ impl DoubleDeepAgent {
         mem_replay: RandomExperienceBuffer,
         generate_policy: Box<PolicyGenerator>,
         opt: OptimizerEnum,
+        loss_fn: fn(&Tensor, &Tensor) -> Tensor,
         lr: f64,
         discount_factor: f32,
         max_grad_norm: f64,
@@ -54,6 +79,7 @@ impl DoubleDeepAgent {
         mem_target.copy(&mem_policy).unwrap();
         Self {
             optimizer: opt.build(&mem_policy, lr).unwrap(),
+            loss_fn,
             action_selection: action_selector,
             memory: mem_replay,
             policy: policy_net,
@@ -123,8 +149,11 @@ impl DoubleDeepAgent {
             let (b_state, b_action, b_reward, b_done, b_state_) = self.get_batch(32);
             let policy_qvalues = self.batch_qvalues(&b_state, &b_action);
             let expected_values = self.batch_expected_values(&b_state_, &b_reward, &b_done);
-            // let loss = policy_qvalues.mse_loss(&expected_values, tch::Reduction::Mean);
-            let loss = policy_qvalues.smooth_l1_loss(&expected_values, tch::Reduction::Mean, 1.0);
+            let loss = (self.loss_fn)(&policy_qvalues, &expected_values);
+            // let loss = policy_qvalues
+            //     .mse_loss(&expected_values, tch::Reduction::Mean)
+            //     .sqrt();
+            // let loss = policy_qvalues.smooth_l1_loss(&expected_values, tch::Reduction::Mean, 1.0);
             self.optimize(loss);
             Some(expected_values.mean(Kind::Float).try_into().unwrap())
         } else {

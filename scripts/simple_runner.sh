@@ -1,3 +1,4 @@
 #!/bin/bash
-time python scripts/run_rust.py
-time python scripts/run_python.py
+target=$1
+time python scripts/run_rust_$target.py
+time python scripts/run_python_$target.py
