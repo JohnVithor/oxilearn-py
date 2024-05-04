@@ -4,8 +4,6 @@ import numpy as np
 import random
 import os
 
-from datetime import datetime
-
 from stable_baselines3 import DQN
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.env_util import make_vec_env

@@ -59,6 +59,7 @@ pub struct DoubleDeepAgent {
     pub memory: RandomExperienceBuffer,
     pub discount_factor: f32,
     pub max_grad_norm: f64,
+    pub device: Device,
 }
 
 impl DoubleDeepAgent {
@@ -69,7 +70,7 @@ impl DoubleDeepAgent {
         generate_policy: Box<PolicyGenerator>,
         opt: OptimizerEnum,
         loss_fn: fn(&Tensor, &Tensor) -> Tensor,
-        lr: f64,
+        learning_rate: f64,
         discount_factor: f32,
         max_grad_norm: f64,
         device: Device,
@@ -78,7 +79,7 @@ impl DoubleDeepAgent {
         let (target_net, mut mem_target) = generate_policy("q_net", device);
         mem_target.copy(&mem_policy).unwrap();
         Self {
-            optimizer: opt.build(&mem_policy, lr).unwrap(),
+            optimizer: opt.build(&mem_policy, learning_rate).unwrap(),
             loss_fn,
             action_selection: action_selector,
             memory: mem_replay,
@@ -88,16 +89,17 @@ impl DoubleDeepAgent {
             target_policy_vs: mem_target,
             max_grad_norm,
             discount_factor,
+            device,
         }
     }
 
     pub fn get_action(&mut self, state: &Tensor) -> usize {
-        let values = tch::no_grad(|| self.policy.forward(state));
+        let values = tch::no_grad(|| self.policy.forward(&state.to_device(self.device)));
         self.action_selection.get_action(&values) as usize
     }
 
     pub fn get_best_action(&self, state: &Tensor) -> usize {
-        let values = tch::no_grad(|| self.policy.forward(state));
+        let values = tch::no_grad(|| self.policy.forward(&state.to_device(self.device)));
         let a: i32 = values.argmax(0, true).try_into().unwrap();
         a as usize
     }
@@ -123,7 +125,9 @@ impl DoubleDeepAgent {
     }
 
     pub fn batch_qvalues(&self, b_states: &Tensor, b_actions: &Tensor) -> Tensor {
-        self.policy.forward(b_states).gather(1, b_actions, false)
+        self.policy
+            .forward(&b_states.to_device(self.device))
+            .gather(1, b_actions, false)
     }
 
     pub fn batch_expected_values(
@@ -132,9 +136,16 @@ impl DoubleDeepAgent {
         b_reward: &Tensor,
         b_done: &Tensor,
     ) -> Tensor {
-        let best_target_qvalues =
-            tch::no_grad(|| self.target_policy.forward(b_state_).max_dim(1, true).0);
-        b_reward + self.discount_factor * (&Tensor::from(1.0) - b_done) * (&best_target_qvalues)
+        let best_target_qvalues = tch::no_grad(|| {
+            self.target_policy
+                .forward(&b_state_.to_device(self.device))
+                .max_dim(1, true)
+                .0
+        });
+        b_reward
+            + self.discount_factor
+                * (&Tensor::from(1.0).to_device(self.device) - &b_done.to_device(self.device))
+                * (&best_target_qvalues)
     }
 
     pub fn optimize(&mut self, loss: Tensor) {
@@ -144,18 +155,18 @@ impl DoubleDeepAgent {
         self.optimizer.step();
     }
 
-    pub fn update(&mut self) -> Option<f32> {
+    pub fn update(&mut self, gradient_steps: u128, batch_size: usize) -> Option<f32> {
+        let mut values = vec![];
         if self.memory.ready() {
-            let (b_state, b_action, b_reward, b_done, b_state_) = self.get_batch(32);
-            let policy_qvalues = self.batch_qvalues(&b_state, &b_action);
-            let expected_values = self.batch_expected_values(&b_state_, &b_reward, &b_done);
-            let loss = (self.loss_fn)(&policy_qvalues, &expected_values);
-            // let loss = policy_qvalues
-            //     .mse_loss(&expected_values, tch::Reduction::Mean)
-            //     .sqrt();
-            // let loss = policy_qvalues.smooth_l1_loss(&expected_values, tch::Reduction::Mean, 1.0);
-            self.optimize(loss);
-            Some(expected_values.mean(Kind::Float).try_into().unwrap())
+            for _ in 0..gradient_steps {
+                let (b_state, b_action, b_reward, b_done, b_state_) = self.get_batch(batch_size);
+                let policy_qvalues = self.batch_qvalues(&b_state, &b_action);
+                let expected_values = self.batch_expected_values(&b_state_, &b_reward, &b_done);
+                let loss = (self.loss_fn)(&policy_qvalues, &expected_values);
+                self.optimize(loss);
+                values.push(expected_values.mean(Kind::Float).try_into().unwrap())
+            }
+            Some((values.iter().sum::<f32>()) / (values.len() as f32))
         } else {
             None
         }

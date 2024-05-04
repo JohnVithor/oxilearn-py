@@ -26,7 +26,7 @@ pub struct DQNAgent {
     exploration_fraction: f32,
     memory_size: usize,
     min_memory_size: usize,
-    lr: f64,
+    learning_rate: f64,
     discount_factor: f32,
     max_grad_norm: f64,
     agent: Option<DoubleDeepAgent>,
@@ -53,10 +53,10 @@ impl DQNAgent {
     #[new]
     #[pyo3(signature = (
         net_arch,
+        learning_rate,
         last_activation="none",
         memory_size=5_000,
         min_memory_size=1_000,
-        lr=0.0005,
         discount_factor=0.99,
         initial_epsilon=1.0,
         final_epsilon=0.05,
@@ -65,15 +65,15 @@ impl DQNAgent {
         seed=0,
         optimizer="Adam",
         // optimizer_info=HashMap::default(),
-        loss_fn="Huber"
+        loss_fn="MSE"
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         net_arch: Vec<(i64, String)>,
+        learning_rate: f64,
         last_activation: &str,
         memory_size: usize,
         min_memory_size: usize,
-        lr: f64,
         discount_factor: f32,
         initial_epsilon: f32,
         final_epsilon: f32,
@@ -125,7 +125,7 @@ impl DQNAgent {
             exploration_fraction,
             memory_size,
             min_memory_size,
-            lr,
+            learning_rate,
             discount_factor,
             max_grad_norm,
             agent: None,
@@ -185,7 +185,7 @@ impl DQNAgent {
                 self.memory_size,
                 self.min_memory_size,
                 self.rng.next_u64(),
-                Device::Cpu,
+                Device::cuda_if_available(),
             );
 
             let action_selector = EpsilonGreedy::new(
@@ -211,39 +211,59 @@ impl DQNAgent {
                 arch,
                 self.optimizer,
                 self.loss_fn,
-                self.lr,
+                self.learning_rate,
                 self.discount_factor,
                 self.max_grad_norm,
-                Device::Cpu,
+                Device::cuda_if_available(),
             ))
         });
         Ok(())
     }
 
-    #[pyo3(signature = (env, solve_with, steps=200_000, update_freq=10, eval_at=50, eval_for=10, verbose=0))]
+    #[pyo3(signature = (
+        env,
+        eval_env,
+        solve_with,
+        steps=200_000,
+        gradient_steps=1,
+        train_freq=1,
+        update_freq=10,
+        batch_size=32,
+        eval_at=50,
+        eval_for=10,
+        verbose=0
+    ))]
     #[allow(clippy::too_many_arguments)]
     pub fn train(
         &mut self,
         env: Bound<PyAny>,
+        eval_env: Bound<PyAny>,
         solve_with: f32,
         steps: u128,
+        gradient_steps: u128,
+        train_freq: u128,
         update_freq: u128,
+        batch_size: usize,
         eval_at: u128,
         eval_for: u128,
         verbose: usize,
         py: Python<'_>,
     ) -> PyResult<TrainResults> {
         let env = PyEnv::new(env)?;
+        let eval_env = PyEnv::new(eval_env)?;
         if self.agent.is_none() {
             self.create_agent(&env, py)?;
         }
 
         py.allow_threads(|| {
-            let mut trainer = Trainer::new(env).unwrap();
+            let mut trainer = Trainer::new(env, eval_env).unwrap();
             trainer.early_stop = Some(Box::new(move |reward| reward >= solve_with));
             let r: Result<TrainResults, OxiLearnErr> = trainer.train_by_steps(
                 self.agent.as_mut().unwrap(),
                 steps,
+                gradient_steps,
+                train_freq,
+                batch_size,
                 update_freq,
                 eval_at,
                 eval_for,
@@ -261,13 +281,14 @@ impl DQNAgent {
         n_eval_episodes: u128,
         py: Python<'_>,
     ) -> PyResult<(f32, f32)> {
-        let env = PyEnv::new(env)?;
+        let train_env = PyEnv::new(env.clone())?;
+        let eval_env = PyEnv::new(env)?;
         if self.agent.is_none() {
-            self.create_agent(&env, py)?;
+            self.create_agent(&train_env, py)?;
         }
 
         py.allow_threads(|| {
-            let mut trainer = Trainer::new(env).unwrap();
+            let mut trainer = Trainer::new(train_env, eval_env).unwrap();
             let r = trainer.evaluate(self.agent.as_mut().unwrap(), n_eval_episodes);
             let rewards = r.unwrap().0;
             let reward_avg = (rewards.iter().sum::<f32>()) / (rewards.len() as f32);
