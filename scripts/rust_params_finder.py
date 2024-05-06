@@ -9,6 +9,8 @@ from oxilearn import DQNAgent
 import optuna
 from optuna import Trial
 
+least_steps_number = 20_000
+
 
 def create_objective(env_name, seed, verbose):
 
@@ -58,21 +60,25 @@ def create_objective(env_name, seed, verbose):
         env.reset(seed=seed + 1)
         eval_env.reset(seed=seed + 2)
 
-        results = agent.train(
-            env,
-            eval_env,
-            env.spec.reward_threshold,
-            steps=1_000_000,
-            gradient_steps=gradient_steps,
-            train_freq=train_freq,
-            update_freq=target_update_interval,
-            batch_size=batch_size,
-            eval_at=eval_freq,
-            eval_for=eval_size,
-            verbose=verbose,
-        )
-        training_steps = sum(results[1])
-        reward, std = agent.evaluate(eval_env, eval_size)
+        training_steps = 0
+        for i, steps in enumerate(range(10_000, 100_000, 10_000)):
+            results = agent.train(
+                env,
+                eval_env,
+                env.spec.reward_threshold,
+                steps=steps,
+                gradient_steps=gradient_steps,
+                train_freq=train_freq,
+                update_freq=target_update_interval,
+                batch_size=batch_size,
+                eval_at=eval_freq,
+                eval_for=eval_size,
+                verbose=verbose,
+            )
+            training_steps += sum(results[1])
+            if training_steps >= least_steps_number:
+                reward, std = agent.evaluate(eval_env, eval_size)
+                return training_steps, reward
 
         return training_steps, reward
 
@@ -101,7 +107,7 @@ if __name__ == "__main__":
     study.optimize(
         create_objective(env_name, seed, verbose),
         n_trials=100,
-        n_jobs=2,
+        n_jobs=1,
         show_progress_bar=True,
     )
     print(study.best_params)
