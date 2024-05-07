@@ -18,7 +18,7 @@ use tch::{
 };
 
 #[pyclass]
-pub struct DQNAgent {
+pub struct DQN {
     net_arch: Vec<(i64, String)>,
     last_activation: ActivationFunction,
     initial_epsilon: f32,
@@ -35,7 +35,7 @@ pub struct DQNAgent {
     loss_fn: fn(&Tensor, &Tensor) -> Tensor,
 }
 
-impl DQNAgent {
+impl DQN {
     fn get_activation(id: &str) -> ActivationFunction {
         match id {
             "relu" => |xs: &Tensor| xs.relu(),
@@ -48,7 +48,7 @@ impl DQNAgent {
 }
 
 #[pymethods]
-impl DQNAgent {
+impl DQN {
     /// Create a new DQNAgent
     #[new]
     #[pyo3(signature = (
@@ -119,7 +119,7 @@ impl DQNAgent {
 
         Ok(Self {
             net_arch,
-            last_activation: DQNAgent::get_activation(last_activation),
+            last_activation: DQN::get_activation(last_activation),
             initial_epsilon,
             final_epsilon,
             exploration_fraction,
@@ -229,7 +229,7 @@ impl DQNAgent {
         train_freq=1,
         update_freq=10,
         batch_size=32,
-        eval_at=50,
+        eval_freq=1_000,
         eval_for=10,
         verbose=0
     ))]
@@ -244,7 +244,7 @@ impl DQNAgent {
         train_freq: u128,
         update_freq: u128,
         batch_size: usize,
-        eval_at: u128,
+        eval_freq: u128,
         eval_for: u128,
         verbose: usize,
         py: Python<'_>,
@@ -265,7 +265,7 @@ impl DQNAgent {
                 train_freq,
                 batch_size,
                 update_freq,
-                eval_at,
+                eval_freq,
                 eval_for,
                 verbose,
             );

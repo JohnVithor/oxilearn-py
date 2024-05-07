@@ -4,7 +4,7 @@ import os
 import torch
 import numpy as np
 import random
-from oxilearn import DQNAgent
+from oxilearn import DQN
 
 
 def main(seed, save, verbose):
@@ -12,7 +12,7 @@ def main(seed, save, verbose):
     env = gym.make("CartPole-v1")
     eval_env = gym.make("CartPole-v1")
 
-    agent = DQNAgent(
+    model = DQN(
         net_arch=[(256, "relu"), (256, "relu")],
         learning_rate=0.0005,
         last_activation="none",
@@ -27,12 +27,12 @@ def main(seed, save, verbose):
         optimizer="Adam",
         loss_fn="MSE",
     )
-    agent.prepare(env)
+    model.prepare(env)
 
     env.reset(seed=seed + 1)
     eval_env.reset(seed=seed + 2)
 
-    results = agent.train(
+    results = model.train(
         env,
         eval_env,
         env.spec.reward_threshold,
@@ -41,16 +41,16 @@ def main(seed, save, verbose):
         train_freq=2,
         update_freq=10,
         batch_size=64,
-        eval_at=1000,
+        eval_freq=1_000,
         eval_for=10,
         verbose=verbose,
     )
     training_steps = sum(results[1])
 
     if save:
-        agent.save("./safetensors-rust")
+        model.save("./safetensors-rust")
 
-    return training_steps, agent.evaluate(env, 10)
+    return training_steps, model.evaluate(env, 10)
 
 
 if __name__ == "__main__":

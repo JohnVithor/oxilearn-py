@@ -13,7 +13,7 @@ mod experience_buffer;
 mod trainer;
 mod wrappers;
 
-use wrappers::DQNAgent;
+use wrappers::DQN;
 
 #[derive(Debug, Clone)]
 pub enum OxiLearnErr {
@@ -69,7 +69,7 @@ fn generate_policy(
 #[pymodule]
 fn oxilearn(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("__version__", "0.0.1")?;
-    m.add_class::<DQNAgent>()?;
+    m.add_class::<DQN>()?;
     create_exception!(m, OxiLearnErr, PyException);
     Ok(())
 }

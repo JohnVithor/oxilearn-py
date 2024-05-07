@@ -39,7 +39,7 @@ impl Trainer {
         train_freq: u128,
         batch_size: usize,
         update_freq: u128,
-        eval_at: u128,
+        eval_freq: u128,
         eval_for: u128,
         verbose: usize,
     ) -> Result<TrainResults, OxiLearnErr> {
@@ -84,7 +84,7 @@ impl Trainer {
                 action_counter = 0;
             }
 
-            if step % eval_at == 0 {
+            if step % eval_freq == 0 {
                 let (rewards, eval_lengths) = self.evaluate(agent, eval_for)?;
                 let reward_avg = (rewards.iter().sum::<f32>()) / (rewards.len() as f32);
                 let eval_lengths_avg = (eval_lengths.iter().map(|x| *x as f32).sum::<f32>())
