@@ -21,7 +21,7 @@ def main(seed, save, verbose):
         discount_factor=0.99,
         initial_epsilon=1.0,
         final_epsilon=0.05,
-        exploration_fraction=0.05,
+        exploration_fraction=0.25,
         max_grad_norm=10.0,
         seed=seed,
         optimizer="Adam",
