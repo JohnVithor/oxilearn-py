@@ -23,12 +23,12 @@ def main(seed, save, verbose):
         env=vec_env,
         learning_rate=2.3e-3,
         batch_size=64,
-        buffer_size=100_000,
+        buffer_size=5_000,
         learning_starts=1_000,
         gamma=0.99,
         target_update_interval=10,
-        train_freq=1,
-        gradient_steps=10,
+        train_freq=2,
+        gradient_steps=4,
         exploration_initial_eps=1.00,
         exploration_fraction=0.16,
         exploration_final_eps=0.04,
@@ -39,7 +39,7 @@ def main(seed, save, verbose):
     #     model.q_net_target.load_state_dict(load_file('./safetensors/target_policy_weights.safetensors'))
     
     callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=vec_env.get_attr("spec")[0].reward_threshold, verbose=verbose)
-    eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, eval_freq=callback_freq, verbose=verbose)
+    eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, eval_freq=callback_freq, n_eval_episodes=eval_size, verbose=verbose)
 
     model.learn(total_timesteps=1_000_000, callback=[eval_callback])
 
