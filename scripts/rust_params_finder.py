@@ -71,7 +71,7 @@ def create_objective(env_name, seed, verbose):
                 train_freq=train_freq,
                 update_freq=target_update_interval,
                 batch_size=batch_size,
-                eval_at=eval_freq,
+                eval_freq=eval_freq,
                 eval_for=eval_size,
                 verbose=verbose,
             )
