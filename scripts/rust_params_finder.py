@@ -5,7 +5,7 @@ import random
 import os
 
 import gymnasium as gym
-from oxilearn import DQNAgent
+from oxilearn import DQN
 import optuna
 from optuna import Trial
 
@@ -40,7 +40,7 @@ def create_objective(env_name, seed, verbose):
         )
         max_grad_norm = trial.suggest_float("max_grad_norm", 0.1, 10.0)
 
-        agent = DQNAgent(
+        model = DQN(
             net_arch=[(256, "relu"), (256, "relu")],
             learning_rate=learning_rate,
             last_activation="none",
@@ -55,14 +55,14 @@ def create_objective(env_name, seed, verbose):
             optimizer=optimizer,
             loss_fn=loss_fn,
         )
-        agent.prepare(env)
+        model.prepare(env)
 
         env.reset(seed=seed + 1)
         eval_env.reset(seed=seed + 2)
 
         training_steps = 0
         for i, steps in enumerate(range(10_000, 300_000, 10_000)):
-            results = agent.train(
+            results = model.train(
                 env,
                 eval_env,
                 env.spec.reward_threshold,
@@ -77,7 +77,7 @@ def create_objective(env_name, seed, verbose):
             )
             training_steps += sum(results[1])
             if training_steps >= least_steps_number:
-                reward, std = agent.evaluate(eval_env, eval_size)
+                reward, std = model.evaluate(eval_env, eval_size)
                 return training_steps, reward
 
         return training_steps, reward
