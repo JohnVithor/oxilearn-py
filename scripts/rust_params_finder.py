@@ -9,7 +9,7 @@ from oxilearn import DQNAgent
 import optuna
 from optuna import Trial
 
-least_steps_number = 20_000
+least_steps_number = 100_000
 
 
 def create_objective(env_name, seed, verbose):
@@ -61,7 +61,7 @@ def create_objective(env_name, seed, verbose):
         eval_env.reset(seed=seed + 2)
 
         training_steps = 0
-        for i, steps in enumerate(range(10_000, 100_000, 10_000)):
+        for i, steps in enumerate(range(10_000, 300_000, 10_000)):
             results = agent.train(
                 env,
                 eval_env,
