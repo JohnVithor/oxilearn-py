@@ -157,7 +157,7 @@ impl DoubleDeepAgent {
         self.optimizer.step();
     }
 
-    pub fn update(&mut self, gradient_steps: u128, batch_size: usize) -> Option<f32> {
+    pub fn update(&mut self, gradient_steps: u32, batch_size: usize) -> Option<f32> {
         let mut values = vec![];
         if self.memory.ready() {
             for _ in 0..gradient_steps {

@@ -3,7 +3,7 @@ use tch::Tensor;
 
 use crate::{dqn::DoubleDeepAgent, env::PyEnv, OxiLearnErr};
 
-pub type TrainResults = (Vec<f32>, Vec<u128>, Vec<f32>, Vec<f32>, Vec<f32>);
+pub type TrainResults = (Vec<f32>, Vec<u32>, Vec<f32>, Vec<f32>, Vec<f32>);
 
 pub struct Trainer {
     env: PyEnv,
@@ -34,24 +34,24 @@ impl Trainer {
     pub fn train_by_steps(
         &mut self,
         agent: &mut DoubleDeepAgent,
-        n_steps: u128,
-        gradient_steps: u128,
-        train_freq: u128,
+        n_steps: u32,
+        gradient_steps: u32,
+        train_freq: u32,
         batch_size: usize,
-        update_freq: u128,
-        eval_freq: u128,
-        eval_for: u128,
+        update_freq: u32,
+        eval_freq: u32,
+        eval_for: u32,
         verbose: usize,
     ) -> Result<TrainResults, OxiLearnErr> {
         let mut curr_obs: Tensor = Python::with_gil(|py| self.env.reset(py))?;
         let mut training_reward: Vec<f32> = vec![];
-        let mut training_length: Vec<u128> = vec![];
+        let mut training_length: Vec<u32> = vec![];
         let mut training_error: Vec<f32> = vec![];
         let mut evaluation_reward: Vec<f32> = vec![];
         let mut evaluation_length: Vec<f32> = vec![];
 
         let mut n_episodes = 1;
-        let mut action_counter: u128 = 0;
+        let mut action_counter: u32 = 0;
         let mut epi_reward: f32 = 0.0;
         agent.reset();
 
@@ -118,12 +118,12 @@ impl Trainer {
     pub fn evaluate(
         &mut self,
         agent: &mut DoubleDeepAgent,
-        n_episodes: u128,
-    ) -> Result<(Vec<f32>, Vec<u128>), OxiLearnErr> {
+        n_episodes: u32,
+    ) -> Result<(Vec<f32>, Vec<u32>), OxiLearnErr> {
         let mut reward_history: Vec<f32> = vec![];
-        let mut episode_length: Vec<u128> = vec![];
+        let mut episode_length: Vec<u32> = vec![];
         for _episode in 0..n_episodes {
-            let mut action_counter: u128 = 0;
+            let mut action_counter: u32 = 0;
             let mut epi_reward: f32 = 0.0;
             let obs_repr = Python::with_gil(|py| self.eval_env.reset(py))?;
             let mut curr_action = agent.get_best_action(&obs_repr);

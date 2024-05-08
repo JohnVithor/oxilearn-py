@@ -30,7 +30,7 @@ def main(seed, save, verbose):
         learning_starts=1_000,
         gamma=0.99,
         target_update_interval=10,
-        train_freq=128,
+        train_freq=256,
         gradient_steps=128,
         exploration_initial_eps=1.00,
         exploration_fraction=0.16,
@@ -79,4 +79,4 @@ if __name__ == "__main__":
     random.seed(seed)
 
     training_steps, (reward, std) = main(seed, save, verbose)
-    print(f"python,{seed},{training_steps},{reward},{std}")
+    print(f"jax,{seed},{training_steps},{reward},{std}")

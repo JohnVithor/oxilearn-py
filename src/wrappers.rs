@@ -240,13 +240,13 @@ impl DQN {
         env: Bound<PyAny>,
         eval_env: Bound<PyAny>,
         solve_with: f32,
-        steps: u128,
-        gradient_steps: u128,
-        train_freq: u128,
-        update_freq: u128,
+        steps: u32,
+        gradient_steps: u32,
+        train_freq: u32,
+        update_freq: u32,
         batch_size: usize,
-        eval_freq: u128,
-        eval_for: u128,
+        eval_freq: u32,
+        eval_for: u32,
         verbose: usize,
         py: Python<'_>,
     ) -> PyResult<TrainResults> {
@@ -279,7 +279,7 @@ impl DQN {
     pub fn evaluate(
         &mut self,
         env: Bound<PyAny>,
-        n_eval_episodes: u128,
+        n_eval_episodes: u32,
         py: Python<'_>,
     ) -> PyResult<(f32, f32)> {
         let train_env = PyEnv::new(env.clone())?;
