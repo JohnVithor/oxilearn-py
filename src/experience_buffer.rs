@@ -1,17 +1,17 @@
-use numpy::ndarray::Array1;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use tch::{Device, Tensor};
+use tch::{Device, IndexOp, Kind, Tensor};
 
 pub struct RandomExperienceBuffer {
-    curr_states: Array1<Tensor>,
-    curr_actions: Array1<Tensor>,
-    rewards: Array1<Tensor>,
-    next_states: Array1<Tensor>,
-    dones: Array1<Tensor>,
-    size: usize,
-    next_idx: usize,
-    capacity: usize,
-    minsize: usize,
+    obs_size: i64,
+    curr_states: Tensor,
+    curr_actions: Tensor,
+    rewards: Tensor,
+    next_states: Tensor,
+    dones: Tensor,
+    size: i64,
+    next_idx: i64,
+    capacity: i64,
+    minsize: i64,
     rng: SmallRng,
     device: Device,
 }
@@ -19,11 +19,12 @@ pub struct RandomExperienceBuffer {
 impl Default for RandomExperienceBuffer {
     fn default() -> Self {
         Self {
-            curr_states: Array1::default(10_000),
-            curr_actions: Array1::default(10_000),
-            rewards: Array1::default(10_000),
-            next_states: Array1::default(10_000),
-            dones: Array1::default(10_000),
+            obs_size: 1,
+            curr_states: Tensor::new(),
+            curr_actions: Tensor::new(),
+            rewards: Tensor::new(),
+            next_states: Tensor::new(),
+            dones: Tensor::new(),
             size: 0,
             next_idx: 0,
             capacity: 10_000,
@@ -35,13 +36,14 @@ impl Default for RandomExperienceBuffer {
 }
 
 impl RandomExperienceBuffer {
-    pub fn new(capacity: usize, minsize: usize, seed: u64, device: Device) -> Self {
+    pub fn new(capacity: i64, obs_size: i64, minsize: i64, seed: u64, device: Device) -> Self {
         Self {
-            curr_states: Array1::default(capacity),
-            curr_actions: Array1::default(capacity),
-            rewards: Array1::default(capacity),
-            next_states: Array1::default(capacity),
-            dones: Array1::default(capacity),
+            obs_size,
+            curr_states: Tensor::empty([capacity, obs_size], (Kind::Float, device)),
+            curr_actions: Tensor::empty(capacity, (Kind::Int64, device)),
+            rewards: Tensor::empty(capacity, (Kind::Float, device)),
+            next_states: Tensor::empty([capacity, obs_size], (Kind::Float, device)),
+            dones: Tensor::empty(capacity, (Kind::Int8, device)),
             capacity,
             next_idx: 0,
             size: 0,
@@ -63,50 +65,48 @@ impl RandomExperienceBuffer {
         done: bool,
         next_state: &Tensor,
     ) {
-        self.curr_states[self.next_idx] = curr_state.shallow_clone();
-        self.curr_actions[self.next_idx] = Tensor::from(curr_action as i64);
-        self.rewards[self.next_idx] = Tensor::from(reward);
-        self.dones[self.next_idx] = Tensor::from(done as i64);
-        self.next_states[self.next_idx] = next_state.shallow_clone();
+        let index: i64 = self.obs_size * self.next_idx;
+        let index = Vec::from_iter(index..(index + self.obs_size));
+        let index = &Tensor::from_slice(&index).to_device(self.device);
+
+        let curr_state = &curr_state.to_device(self.device);
+        let curr_action = &Tensor::from(curr_action as i64).to_device(self.device);
+        let reward = &Tensor::from(reward).to_device(self.device);
+        let done = &Tensor::from(done as i8).to_device(self.device);
+        let next_state = &next_state.to_device(self.device);
+
+        self.curr_states = self.curr_states.put(index, curr_state, false);
+        self.next_states = self.next_states.put(index, next_state, false);
+
+        let index = &Tensor::from(self.next_idx).to_device(self.device);
+
+        self.curr_actions = self.curr_actions.put(index, curr_action, false);
+        self.rewards = self.rewards.put(index, reward, false);
+        self.dones = self.dones.put(index, done, false);
 
         self.next_idx = (self.next_idx + 1) % self.capacity;
         self.size = self.capacity.min(self.size + 1);
     }
 
     pub fn sample_batch(&mut self, size: usize) -> (Tensor, Tensor, Tensor, Tensor, Tensor) {
-        let index: Vec<usize> = (0..size)
+        let index: Vec<i64> = (0..size)
             .map(|_| self.rng.gen_range(0..self.size))
             .collect();
-        let mut curr_obs: Vec<Tensor> = Vec::new();
-        let mut curr_actions: Vec<Tensor> = Vec::new();
-        let mut rewards: Vec<Tensor> = Vec::new();
-        let mut dones: Vec<Tensor> = Vec::new();
-        let mut next_obs: Vec<Tensor> = Vec::new();
-        index.iter().for_each(|i| {
-            curr_obs.push(self.curr_states[*i].shallow_clone());
-            curr_actions.push(self.curr_actions[*i].shallow_clone());
-            rewards.push(self.rewards[*i].shallow_clone());
-            dones.push(self.dones[*i].shallow_clone());
-            next_obs.push(self.next_states[*i].shallow_clone());
-        });
         (
-            Tensor::stack(&curr_obs, 0)
-                .to_kind(tch::Kind::Float)
-                .to_device(self.device),
-            Tensor::stack(&curr_actions, 0)
+            self.curr_states.i(index.clone()).to_device(self.device),
+            self.curr_actions
+                .i(index.clone())
                 .reshape([-1, 1])
                 .to_device(self.device),
-            Tensor::stack(&rewards, 0)
+            self.rewards
+                .i(index.clone())
                 .reshape([-1, 1])
-                .to_kind(tch::Kind::Float)
                 .to_device(self.device),
-            Tensor::stack(&dones, 0)
+            self.dones
+                .i(index.clone())
                 .reshape([-1, 1])
-                .to_kind(tch::Kind::Float)
                 .to_device(self.device),
-            Tensor::stack(&next_obs, 0)
-                .to_kind(tch::Kind::Float)
-                .to_device(self.device),
+            self.next_states.i(index).to_device(self.device),
         )
     }
 }

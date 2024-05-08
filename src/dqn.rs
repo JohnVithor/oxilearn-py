@@ -128,6 +128,7 @@ impl DoubleDeepAgent {
         self.policy
             .forward(&b_states.to_device(self.device))
             .gather(1, b_actions, false)
+            .to_kind(Kind::Float)
     }
 
     pub fn batch_expected_values(
@@ -142,10 +143,11 @@ impl DoubleDeepAgent {
                 .max_dim(1, true)
                 .0
         });
-        b_reward
+        (b_reward
             + self.discount_factor
                 * (&Tensor::from(1.0).to_device(self.device) - &b_done.to_device(self.device))
-                * (&best_target_qvalues)
+                * (&best_target_qvalues))
+            .to_kind(Kind::Float)
     }
 
     pub fn optimize(&mut self, loss: Tensor) {

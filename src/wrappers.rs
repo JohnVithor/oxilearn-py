@@ -24,8 +24,8 @@ pub struct DQN {
     initial_epsilon: f32,
     final_epsilon: f32,
     exploration_fraction: f32,
-    memory_size: usize,
-    min_memory_size: usize,
+    memory_size: i64,
+    min_memory_size: i64,
     learning_rate: f64,
     discount_factor: f32,
     max_grad_norm: f64,
@@ -72,8 +72,8 @@ impl DQN {
         net_arch: Vec<(i64, String)>,
         learning_rate: f64,
         last_activation: &str,
-        memory_size: usize,
-        min_memory_size: usize,
+        memory_size: i64,
+        min_memory_size: i64,
         discount_factor: f32,
         initial_epsilon: f32,
         final_epsilon: f32,
@@ -164,25 +164,26 @@ impl DQN {
         }
     }
 
-    #[pyo3(signature = (env))]
-    pub fn prepare(&mut self, env: Bound<PyAny>, py: Python<'_>) -> PyResult<()> {
-        let env = PyEnv::new(env)?;
-        self.create_agent(&env, py)?;
+    #[pyo3(signature = (environment))]
+    pub fn prepare(&mut self, environment: Bound<PyAny>, py: Python<'_>) -> PyResult<()> {
+        let environment = PyEnv::new(environment)?;
+        self.create_agent(&environment, py)?;
         Ok(())
     }
 
-    fn create_agent(&mut self, env: &PyEnv, py: Python<'_>) -> PyResult<()> {
-        let input = match env.observation_space(py).unwrap() {
+    fn create_agent(&mut self, environment: &PyEnv, py: Python<'_>) -> PyResult<()> {
+        let input = match environment.observation_space(py).unwrap() {
             SpaceInfo::Discrete(_) => Err(PyTypeError::new_err("ambiente inválido")),
             SpaceInfo::Continuous(s) => Ok(s.len()),
         }? as i64;
-        let output = match env.action_space(py).unwrap() {
+        let output = match environment.action_space(py).unwrap() {
             SpaceInfo::Discrete(n) => Ok(n),
             SpaceInfo::Continuous(_) => Err(PyTypeError::new_err("ambiente inválido")),
         }? as i64;
         self.agent = py.allow_threads(|| {
             let mem_replay = RandomExperienceBuffer::new(
                 self.memory_size,
+                input,
                 self.min_memory_size,
                 self.rng.next_u64(),
                 Device::cuda_if_available(),
