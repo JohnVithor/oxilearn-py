@@ -27,7 +27,6 @@ def main(seed, save, verbose):
         optimizer="Adam",
         loss_fn="Huber",
     )
-    model.prepare(env)
 
     env.reset(seed=seed + 1)
     eval_env.reset(seed=seed + 2)

@@ -19,8 +19,8 @@ def create_objective(env_name, seed, verbose):
         eval_size = 10
         eval_freq = 1_000
 
-        env = gym.make("CartPole-v1")
-        eval_env = gym.make("CartPole-v1")
+        env = gym.make("LunarLander-v2")
+        eval_env = gym.make("LunarLander-v2")
 
         learning_rate = trial.suggest_float("learning_rate", 0.00001, 0.1)
         batch_size = trial.suggest_int("batch_size", 16, 256)
