@@ -24,17 +24,17 @@ def main(seed, save, verbose):
     model = DQN(
         policy="MlpPolicy",
         env=vec_env,
-        learning_rate=2.3e-3,
-        batch_size=64,
-        buffer_size=100_000,
+        learning_rate=0.005,
+        batch_size=256,
+        buffer_size=30_000,
         learning_starts=1_000,
         gamma=0.99,
-        target_update_interval=10,
-        train_freq=256,
-        gradient_steps=128,
-        exploration_initial_eps=1.00,
-        exploration_fraction=0.16,
-        exploration_final_eps=0.04,
+        target_update_interval=2,
+        train_freq=100,
+        gradient_steps=100,
+        exploration_initial_eps=0.2,
+        exploration_fraction=0.01,
+        exploration_final_eps=0.05,
         policy_kwargs={"net_arch": [256, 256]},
     )
     # if os.path.exists('./safetensors'):
@@ -52,7 +52,7 @@ def main(seed, save, verbose):
         verbose=verbose,
     )
 
-    model.learn(total_timesteps=1_000_000, callback=[eval_callback])
+    model.learn(total_timesteps=500_000, callback=[eval_callback])
 
     if save:
         os.mkdir("./safetensors-python")

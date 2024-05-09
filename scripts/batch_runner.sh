@@ -6,4 +6,5 @@ for seed in {0..99}
 do
 /usr/bin/time -f "%e,%S,%U,%P,%M,%Z,%F,%R,%c,%w,%I,%O,%C" python scripts/run_rust_$target.py $seed
 /usr/bin/time -f "%e,%S,%U,%P,%M,%Z,%F,%R,%c,%w,%I,%O,%C" python scripts/run_python_$target.py $seed
+/usr/bin/time -f "%e,%S,%U,%P,%M,%Z,%F,%R,%c,%w,%I,%O,%C" python scripts/run_jax_$target.py $seed
 done
