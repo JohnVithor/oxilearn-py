@@ -18,8 +18,12 @@ def main(seed, save, verbose):
     eval_size = 10
     callback_freq = 1_000
 
-    vec_env = make_vec_env("CartPole-v1", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv)
-    eval_env = make_vec_env("CartPole-v1", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv)
+    vec_env = make_vec_env(
+        "CartPole-v1", seed=seed + 1, n_envs=1, vec_env_cls=DummyVecEnv
+    )
+    eval_env = make_vec_env(
+        "CartPole-v1", seed=seed + 2, n_envs=1, vec_env_cls=DummyVecEnv
+    )
 
     model = DQN(
         policy="MlpPolicy",
@@ -35,6 +39,7 @@ def main(seed, save, verbose):
         exploration_initial_eps=0.2,
         exploration_fraction=0.01,
         exploration_final_eps=0.05,
+        seed=seed,
         policy_kwargs={"net_arch": [256, 256]},
     )
     # if os.path.exists('./safetensors'):
