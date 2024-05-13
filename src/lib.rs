@@ -6,6 +6,7 @@ use tch::{
     Device, Tensor,
 };
 
+mod cart_pole;
 mod dqn;
 mod env;
 mod epsilon_greedy;
@@ -14,6 +15,8 @@ mod trainer;
 mod wrappers;
 
 use wrappers::DQN;
+
+use crate::cart_pole::CartPoleWrapper;
 
 #[derive(Debug, Clone)]
 pub enum OxiLearnErr {
@@ -70,6 +73,7 @@ fn generate_policy(
 fn oxilearn(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("__version__", "0.0.1")?;
     m.add_class::<DQN>()?;
+    m.add_class::<CartPoleWrapper>()?;
     create_exception!(m, OxiLearnErr, PyException);
     Ok(())
 }

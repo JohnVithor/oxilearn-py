@@ -13,20 +13,18 @@ pub struct Trainer {
 
 impl Trainer {
     pub fn new(env: PyEnv, eval_env: PyEnv) -> Result<Self, OxiLearnErr> {
-        Python::with_gil(|py| {
-            if env.observation_space(py)?.is_discrete() {
-                // should be continuous
-                return Err(OxiLearnErr::EnvNotSupported);
-            }
-            if !env.action_space(py)?.is_discrete() {
-                // should be discrete
-                return Err(OxiLearnErr::EnvNotSupported);
-            }
-            Ok(Self {
-                env,
-                eval_env,
-                early_stop: None,
-            })
+        if env.observation_space()?.is_discrete() {
+            // should be continuous
+            return Err(OxiLearnErr::EnvNotSupported);
+        }
+        if !env.action_space()?.is_discrete() {
+            // should be discrete
+            return Err(OxiLearnErr::EnvNotSupported);
+        }
+        Ok(Self {
+            env,
+            eval_env,
+            early_stop: None,
         })
     }
 
@@ -43,7 +41,7 @@ impl Trainer {
         eval_for: u32,
         verbose: usize,
     ) -> Result<TrainResults, OxiLearnErr> {
-        let mut curr_obs: Tensor = Python::with_gil(|py| self.env.reset(py))?;
+        let mut curr_obs: Tensor = self.env.reset()?;
         let mut training_reward: Vec<f32> = vec![];
         let mut training_length: Vec<u32> = vec![];
         let mut training_error: Vec<f32> = vec![];
@@ -58,8 +56,7 @@ impl Trainer {
         for step in 1..=n_steps {
             action_counter += 1;
             let curr_action = agent.get_action(&curr_obs);
-            let (next_obs, reward, done, truncated) =
-                Python::with_gil(|py| self.env.step(curr_action, py))?;
+            let (next_obs, reward, done, truncated) = self.env.step(curr_action)?;
             epi_reward += reward;
             agent.add_transition(&curr_obs, curr_action, reward, done, &next_obs);
 
@@ -77,7 +74,7 @@ impl Trainer {
                 if n_episodes % update_freq == 0 && agent.update_networks().is_err() {
                     println!("copy error")
                 }
-                curr_obs = Python::with_gil(|py| self.env.reset(py))?;
+                curr_obs = self.env.reset()?;
                 agent.action_selection_update(step as f32 / n_steps as f32, epi_reward);
                 n_episodes += 1;
                 epi_reward = 0.0;
@@ -125,12 +122,11 @@ impl Trainer {
         for _episode in 0..n_episodes {
             let mut action_counter: u32 = 0;
             let mut epi_reward: f32 = 0.0;
-            let obs_repr = Python::with_gil(|py| self.eval_env.reset(py))?;
+            let obs_repr = self.eval_env.reset()?;
             let mut curr_action = agent.get_best_action(&obs_repr);
             loop {
                 action_counter += 1;
-                let (obs, reward, done, truncated) =
-                    Python::with_gil(|py| self.eval_env.step(curr_action, py))?;
+                let (obs, reward, done, truncated) = self.eval_env.step(curr_action)?;
                 let next_obs_repr = obs;
                 let next_action_repr: usize = agent.get_best_action(&next_obs_repr);
                 let next_action = next_action_repr;
