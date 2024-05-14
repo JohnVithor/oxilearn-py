@@ -24,8 +24,8 @@ def main(seed, save, verbose):
         exploration_fraction=0.1,
         max_grad_norm=10.0,
         seed=seed,
-        optimizer="Adam",
-        loss_fn="MSE",
+        optimizer="AdamW",
+        loss_fn="Huber",
     )
 
     env.reset(seed=seed + 1)
@@ -38,8 +38,8 @@ def main(seed, save, verbose):
         steps=100_000,
         gradient_steps=1,
         train_freq=1,
-        update_freq=2,
-        batch_size=64,
+        update_freq=10,
+        batch_size=128,
         eval_freq=1_000,
         eval_for=10,
         verbose=verbose,

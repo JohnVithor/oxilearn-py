@@ -126,7 +126,7 @@ impl DoubleDeepAgent {
 
     pub fn batch_qvalues(&self, b_states: &Tensor, b_actions: &Tensor) -> Tensor {
         self.policy
-            .forward(&b_states.to_device(self.device))
+            .forward(b_states)
             .gather(1, b_actions, false)
             .to_kind(Kind::Float)
     }
@@ -137,15 +137,11 @@ impl DoubleDeepAgent {
         b_reward: &Tensor,
         b_done: &Tensor,
     ) -> Tensor {
-        let best_target_qvalues = tch::no_grad(|| {
-            self.target_policy
-                .forward(&b_state_.to_device(self.device))
-                .max_dim(1, true)
-                .0
-        });
+        let best_target_qvalues =
+            tch::no_grad(|| self.target_policy.forward(b_state_).max_dim(1, true).0);
         (b_reward
             + self.discount_factor
-                * (&Tensor::from(1.0).to_device(self.device) - &b_done.to_device(self.device))
+                * (&Tensor::from(1.0).to_device(self.device) - b_done)
                 * (&best_target_qvalues))
             .to_kind(Kind::Float)
     }

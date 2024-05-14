@@ -31,6 +31,7 @@ pub struct DQN {
     max_grad_norm: f64,
     agent: Option<DoubleDeepAgent>,
     rng: SmallRng,
+    normalize_obs: bool,
     optimizer: OptimizerEnum,
     loss_fn: fn(&Tensor, &Tensor) -> Tensor,
 }
@@ -63,6 +64,7 @@ impl DQN {
         exploration_fraction=0.05,
         max_grad_norm=10.0,
         seed=0,
+        normalize_obs=false,
         optimizer="Adam",
         // optimizer_info=HashMap::default(),
         loss_fn="MSE"
@@ -80,6 +82,7 @@ impl DQN {
         exploration_fraction: f32,
         max_grad_norm: f64,
         seed: u64,
+        normalize_obs:bool,
         optimizer: &str,
         // optimizer_info: HashMap<String, String>,
         loss_fn: &str,
@@ -133,6 +136,7 @@ impl DQN {
                 agent: None,
                 rng,
                 optimizer,
+                normalize_obs,
                 loss_fn,
             })})
     }
@@ -187,6 +191,7 @@ impl DQN {
             input,
             self.min_memory_size,
             self.rng.next_u64(),
+            self.normalize_obs,
             Device::cuda_if_available(),
         );
 

@@ -30,11 +30,7 @@ impl ExperienceStats {
     }
 
     pub fn var(&self) -> Tensor {
-        if self.count.int64_value(&[0]) > 1 {
-            &self.msqs / Scalar::float((self.count.int64_value(&[0]) - 1) as f64)
-        } else {
-            Tensor::ones(self.msqs.size(), (Kind::Float, self.msqs.device()))
-        }
+        &self.msqs / Scalar::float((self.count.int64_value(&[0]) - 1) as f64)
     }
 }
 
@@ -52,10 +48,18 @@ pub struct RandomExperienceBuffer {
     rng: SmallRng,
     device: Device,
     pub stats: ExperienceStats,
+    normalize_obs: bool,
 }
 
 impl RandomExperienceBuffer {
-    pub fn new(capacity: i64, obs_size: i64, minsize: i64, seed: u64, device: Device) -> Self {
+    pub fn new(
+        capacity: i64,
+        obs_size: i64,
+        minsize: i64,
+        seed: u64,
+        normalize_obs: bool,
+        device: Device,
+    ) -> Self {
         Self {
             obs_size,
             curr_states: Tensor::empty([capacity, obs_size], (Kind::Float, device)),
@@ -70,6 +74,7 @@ impl RandomExperienceBuffer {
             rng: SmallRng::seed_from_u64(seed),
             device,
             stats: ExperienceStats::new(obs_size, device),
+            normalize_obs,
         }
     }
 
@@ -106,14 +111,20 @@ impl RandomExperienceBuffer {
 
         self.next_idx = (self.next_idx + 1) % self.capacity;
         self.size = self.capacity.min(self.size + 1);
-        self.stats.push(curr_state);
+
+        if self.normalize_obs {
+            self.stats.push(curr_state);
+        }
     }
 
     pub fn normalize(&self, values: Tensor) -> Tensor {
         // let (var, mean) = self.curr_states.var_mean_dim(0, false, false);
-        // ((values - var) / mean).to_device(self.device)
-        // (values - self.stats.mean()) / (f64::EPSILON + self.stats.var()).to_device(self.device)
-        values
+        // ((values - mean) / var.sqrt()).to_device(self.device)
+        if self.normalize_obs {
+            (values - self.stats.mean()) / (self.stats.var()).sqrt()
+        } else {
+            values
+        }
     }
 
     pub fn sample_batch(&mut self, size: usize) -> (Tensor, Tensor, Tensor, Tensor, Tensor) {
@@ -121,20 +132,11 @@ impl RandomExperienceBuffer {
             .map(|_| self.rng.gen_range(0..self.size))
             .collect();
         (
-            self.normalize(self.curr_states.i(index.clone()).to_device(self.device)),
-            self.curr_actions
-                .i(index.clone())
-                .reshape([-1, 1])
-                .to_device(self.device),
-            self.rewards
-                .i(index.clone())
-                .reshape([-1, 1])
-                .to_device(self.device),
-            self.dones
-                .i(index.clone())
-                .reshape([-1, 1])
-                .to_device(self.device),
-            self.normalize(self.next_states.i(index).to_device(self.device)),
+            self.normalize(self.curr_states.i(index.clone())),
+            self.curr_actions.i(index.clone()).reshape([-1, 1]),
+            self.rewards.i(index.clone()).reshape([-1, 1]),
+            self.dones.i(index.clone()).reshape([-1, 1]),
+            self.normalize(self.next_states.i(index)),
         )
     }
 }
