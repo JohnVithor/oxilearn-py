@@ -1,4 +1,3 @@
-use pyo3::Python;
 use tch::Tensor;
 
 use crate::{dqn::DoubleDeepAgent, env::PyEnv, OxiLearnErr};
@@ -90,7 +89,7 @@ impl Trainer {
                     println!(
                         "steps number: {step} - eval reward: {reward_avg} - epsilon: {}",
                         agent.get_epsilon()
-                    )
+                    );
                 }
                 evaluation_reward.push(reward_avg);
                 evaluation_length.push(eval_lengths_avg);

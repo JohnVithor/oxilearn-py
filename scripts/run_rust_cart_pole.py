@@ -39,7 +39,7 @@ def main(seed, save, verbose):
         gradient_steps=1,
         train_freq=1,
         update_freq=2,
-        batch_size=32,
+        batch_size=64,
         eval_freq=1_000,
         eval_for=10,
         verbose=verbose,
