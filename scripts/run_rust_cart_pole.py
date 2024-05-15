@@ -14,17 +14,17 @@ def main(seed, save, verbose):
 
     model = DQN(
         net_arch=[(256, "relu"), (256, "relu")],
-        learning_rate=0.0005,
+        learning_rate=0.03,
         last_activation="none",
         memory_size=10_000,
-        min_memory_size=1_000,
+        min_memory_size=128,
         discount_factor=0.99,
         initial_epsilon=0.5,
         final_epsilon=0.05,
         exploration_fraction=0.1,
         max_grad_norm=10.0,
         seed=seed,
-        optimizer="AdamW",
+        optimizer="Adam",
         loss_fn="Huber",
     )
 
@@ -38,7 +38,7 @@ def main(seed, save, verbose):
         steps=100_000,
         gradient_steps=1,
         train_freq=1,
-        update_freq=10,
+        update_freq=2,
         batch_size=128,
         eval_freq=1_000,
         eval_for=10,

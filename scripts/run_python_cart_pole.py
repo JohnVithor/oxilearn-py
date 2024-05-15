@@ -28,10 +28,10 @@ def main(seed, save, verbose):
     model = DQN(
         policy="MlpPolicy",
         env=vec_env,
-        learning_rate=0.0005,
-        batch_size=32,
+        learning_rate=0.03,
+        batch_size=128,
         buffer_size=10_000,
-        learning_starts=1_000,
+        learning_starts=128,
         gamma=0.99,
         target_update_interval=2,
         train_freq=1,
