@@ -26,10 +26,12 @@ def create_objective(env_name, seed, verbose):
         batch_size = trial.suggest_int("batch_size", 16, 256)
         buffer_size = trial.suggest_int("buffer_size", 1_000, 100_000)
         min_buffer_size = trial.suggest_int("min_buffer_size", 1_000, 10_000)
-        gamma = trial.suggest_float("gamma", 0.9, 0.99)
         target_update_interval = trial.suggest_int("target_update_interval", 1, 256)
         train_freq = trial.suggest_int("train_freq", 1, 256)
         gradient_steps = trial.suggest_int("gradient_steps", 1, 256)
+        exploration_initial_eps = trial.suggest_float(
+            "exploration_initial_eps", 0.5, 1.0
+        )
         exploration_fraction = trial.suggest_float("exploration_fraction", 0.1, 0.25)
         exploration_final_eps = trial.suggest_float("exploration_final_eps", 0.0, 0.1)
         optimizer = trial.suggest_categorical(
@@ -38,7 +40,6 @@ def create_objective(env_name, seed, verbose):
         loss_fn = trial.suggest_categorical(
             "loss_fn", ["MAE", "MSE", "RMSE", "Huber", "smooth_l1"]
         )
-        max_grad_norm = trial.suggest_float("max_grad_norm", 0.1, 10.0)
 
         model = DQN(
             net_arch=[(256, "relu"), (256, "relu")],
@@ -46,11 +47,10 @@ def create_objective(env_name, seed, verbose):
             last_activation="none",
             memory_size=buffer_size,
             min_memory_size=min_buffer_size,
-            discount_factor=gamma,
-            initial_epsilon=1.0,
+            discount_factor=0.99,
+            initial_epsilon=exploration_initial_eps,
             final_epsilon=exploration_final_eps,
             exploration_fraction=exploration_fraction,
-            max_grad_norm=max_grad_norm,
             seed=seed,
             optimizer=optimizer,
             loss_fn=loss_fn,
@@ -79,7 +79,7 @@ def create_objective(env_name, seed, verbose):
             if training_steps >= least_steps_number:
                 reward, std = model.evaluate(eval_env, eval_size)
                 return training_steps, reward
-
+        reward, std = model.evaluate(eval_env, eval_size)
         return training_steps, reward
 
     return objective
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     study.optimize(
         create_objective(env_name, seed, verbose),
         n_trials=100,
-        n_jobs=1,
+        n_jobs=-1,
         show_progress_bar=True,
     )
     print(study.best_params)
