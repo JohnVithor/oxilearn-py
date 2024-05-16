@@ -24,8 +24,8 @@ def main(seed, save, verbose):
         exploration_fraction=0.1,
         max_grad_norm=10.0,
         seed=seed,
-        optimizer="Adam",
-        loss_fn="Huber",
+        optimizer="AdamW",
+        loss_fn="MSE",
     )
 
     env.reset(seed=seed + 1)
