@@ -1,22 +1,13 @@
-use pyo3::{
-    create_exception, exceptions::PyException, pymodule, types::PyModule, Bound, PyResult, Python,
-};
 use tch::{
     nn::{self, Module, VarStore},
     Device, Tensor,
 };
 
-mod cart_pole;
-mod dqn;
-mod env;
-mod epsilon_greedy;
-mod experience_buffer;
-mod trainer;
-mod wrappers;
-
-use wrappers::DQN;
-
-use crate::cart_pole::CartPoleWrapper;
+pub mod cart_pole;
+pub mod dqn;
+pub mod epsilon_greedy;
+pub mod experience_buffer;
+pub mod trainer;
 
 #[derive(Debug, Clone)]
 pub enum OxiLearnErr {
@@ -31,7 +22,7 @@ pub enum OxiLearnErr {
 type PolicyGenerator = dyn Fn(&str, Device) -> (Box<dyn Module>, VarStore);
 type ActivationFunction = fn(&Tensor) -> Tensor;
 
-fn generate_policy(
+pub fn generate_policy(
     net_arch: Vec<(i64, ActivationFunction)>,
     last_activation: ActivationFunction,
     input: i64,
@@ -66,14 +57,4 @@ fn generate_policy(
             (Box::new(policy_net), mem_policy)
         },
     ))
-}
-
-/// A Python module implemented in Rust.
-#[pymodule]
-fn oxilearn(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
-    m.add("__version__", "0.0.1")?;
-    m.add_class::<DQN>()?;
-    m.add_class::<CartPoleWrapper>()?;
-    create_exception!(m, OxiLearnErr, PyException);
-    Ok(())
 }
