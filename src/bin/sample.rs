@@ -56,8 +56,22 @@ fn main() {
     let mut trainer = Trainer::new(train_env, eval_env);
     trainer.early_stop = Some(Box::new(move |reward| reward >= 475.0));
 
-    let _training_results: Result<TrainResults, OxiLearnErr> =
+    let training_results: Result<TrainResults, OxiLearnErr> =
         trainer.train_by_steps(&mut model, 50_000, 128, 256, 64, 10, 1000, 10, 1);
+
+    let training_steps = training_results.unwrap().1.iter().sum::<u32>();
+
     let evaluation_results = trainer.evaluate(&mut model, 10);
-    println!("Evaluation results: {:?}", evaluation_results);
+    let rewards = evaluation_results.unwrap().0;
+    let reward_avg = (rewards.iter().sum::<f32>()) / (rewards.len() as f32);
+    let variance = rewards
+        .iter()
+        .map(|value| {
+            let diff = reward_avg - *value;
+            diff * diff
+        })
+        .sum::<f32>()
+        / rewards.len() as f32;
+    let std = variance.sqrt();
+    println!("rust,{seed},{training_steps},{reward_avg},{std}")
 }
