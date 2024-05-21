@@ -114,13 +114,12 @@ impl Trainer {
         let mut reward_history: Vec<f32> = vec![];
         let mut episode_length: Vec<u32> = vec![];
         for _episode in 0..n_episodes {
-            let mut action_counter: u32 = 0;
             let mut epi_reward: f32 = 0.0;
             let obs_repr = self.eval_env.reset(None);
             let obs_repr = Tensor::try_from(obs_repr).unwrap();
             let mut curr_action = agent.get_best_action(&obs_repr);
+            let mut action_counter: u32 = 0;
             loop {
-                action_counter += 1;
                 let (obs, reward, done, truncated) = self.eval_env.step(curr_action).unwrap();
                 let next_obs_repr = Tensor::try_from(obs).unwrap();
                 let next_action_repr: usize = agent.get_best_action(&next_obs_repr);
@@ -129,16 +128,11 @@ impl Trainer {
                 epi_reward += reward;
                 if done || truncated {
                     reward_history.push(epi_reward);
+                    episode_length.push(action_counter);
                     break;
                 }
-                if let Some(s) = &self.early_stop {
-                    if (s)(epi_reward) {
-                        reward_history.push(epi_reward);
-                        break;
-                    };
-                }
+                action_counter += 1;
             }
-            episode_length.push(action_counter);
         }
         Ok((reward_history, episode_length))
     }

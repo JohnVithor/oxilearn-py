@@ -85,9 +85,9 @@ impl CartPole {
         if !self.ready {
             return Err("Env not ready!");
         }
-        if self.curr_step > self.max_steps {
+        if self.curr_step >= self.max_steps {
             self.ready = false;
-            return Ok((self.state.clone().into_dyn(), -1.0, false, true));
+            return Ok((self.state.clone().into_dyn(), 0.0, false, true));
         }
         self.curr_step += 1;
 
