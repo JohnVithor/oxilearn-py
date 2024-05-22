@@ -140,12 +140,6 @@ impl Trainer {
                     reward_history.push(epi_reward);
                     break;
                 }
-                if let Some(s) = &self.early_stop {
-                    if (s)(epi_reward) {
-                        reward_history.push(epi_reward);
-                        break;
-                    };
-                }
             }
             episode_length.push(action_counter);
         }
