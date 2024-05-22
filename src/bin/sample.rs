@@ -15,7 +15,8 @@ fn main() {
     tch::manual_seed(seed as i64);
     tch::maybe_init_cuda();
 
-    let device = Device::cuda_if_available();
+    // let device = Device::cuda_if_available();
+    let device = Device::Cpu;
     let train_env = CartPole::new(500, seed);
     let eval_env = CartPole::new(500, seed + 1);
 
@@ -47,7 +48,7 @@ fn main() {
         policy,
         opt,
         loss_fn,
-        0.0001,
+        0.005,
         0.99,
         10.0,
         device,
@@ -57,7 +58,7 @@ fn main() {
     trainer.early_stop = Some(Box::new(move |reward| reward >= 475.0));
 
     let training_results: Result<TrainResults, OxiLearnErr> =
-        trainer.train_by_steps(&mut model, 50_000, 128, 256, 64, 10, 1000, 10, 1);
+        trainer.train_by_steps(&mut model, 50_000, 1, 1, 32, 10, 1000, 10, 1);
 
     let training_steps = training_results.unwrap().1.iter().sum::<u32>();
 

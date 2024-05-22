@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from typing import Tuple, List
+from dqn import DoubleDeepAgent
 
 TrainResults = Tuple[List[float], List[int], List[float], List[float], List[float]]
 
@@ -13,7 +14,7 @@ class Trainer:
 
     def train_by_steps(
         self,
-        agent,
+        agent: DoubleDeepAgent,
         n_steps: int,
         gradient_steps: int,
         train_freq: int,
@@ -88,7 +89,9 @@ class Trainer:
             evaluation_length,
         )
 
-    def evaluate(self, agent, n_episodes: int) -> Tuple[List[float], List[int]]:
+    def evaluate(
+        self, agent: DoubleDeepAgent, n_episodes: int
+    ) -> Tuple[List[float], List[int]]:
         reward_history = []
         episode_length = []
         for _ in range(n_episodes):
