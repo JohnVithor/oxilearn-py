@@ -22,12 +22,12 @@ fn main() {
     let update_strategy =
         oxilearn::epsilon_greedy::EpsilonUpdateStrategy::EpsilonLinearTrainingDecreasing {
             start: 1.0,
-            end: 0.04,
-            end_fraction: 0.16,
+            end: 0.05,
+            end_fraction: 0.1,
         };
     let action_selector = EpsilonGreedy::new(1.0, seed + 2, update_strategy);
 
-    let mem_replay = RandomExperienceBuffer::new(100_000, 4, 1_000, seed + 3, false, device);
+    let mem_replay = RandomExperienceBuffer::new(10_000, 4, 1_000, seed + 3, false, device);
     let policy = generate_policy(
         vec![
             (256, |xs: &Tensor| xs.relu()),
@@ -47,7 +47,7 @@ fn main() {
         policy,
         opt,
         loss_fn,
-        2.3e-3,
+        0.0001,
         0.99,
         10.0,
         device,

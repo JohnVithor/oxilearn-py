@@ -122,8 +122,10 @@ impl EpsilonGreedy {
     }
 
     pub fn update(&mut self, current_training_progress: f32, epi_reward: f32) {
-        self.current_epsilon =
-            self.update_strategy
-                .update(self.current_epsilon, current_training_progress, epi_reward)
+        self.current_epsilon = self.update_strategy.update(
+            self.current_epsilon,
+            current_training_progress,
+            epi_reward,
+        );
     }
 }
