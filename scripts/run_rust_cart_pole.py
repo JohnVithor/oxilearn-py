@@ -14,7 +14,7 @@ def main(seed, save, verbose):
 
     model = DQN(
         net_arch=[(256, "relu"), (256, "relu")],
-        learning_rate=0.0005,
+        learning_rate=0.001,
         last_activation="none",
         memory_size=10_000,
         min_memory_size=1_000,
@@ -38,8 +38,8 @@ def main(seed, save, verbose):
         steps=50_000,
         gradient_steps=1,
         train_freq=1,
-        update_freq=2,
-        batch_size=32,
+        update_freq=10,
+        batch_size=64,
         eval_freq=1_000,
         eval_for=10,
         verbose=verbose,
