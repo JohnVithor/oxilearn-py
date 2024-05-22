@@ -14,7 +14,7 @@ def main(seed, save, verbose):
 
     model = DQN(
         net_arch=[(256, "relu"), (256, "relu")],
-        learning_rate=0.001,
+        learning_rate=0.01,
         last_activation="none",
         memory_size=10_000,
         min_memory_size=1_000,
@@ -25,7 +25,7 @@ def main(seed, save, verbose):
         max_grad_norm=10.0,
         seed=seed,
         optimizer="Adam",
-        loss_fn="MSE",
+        loss_fn="Huber",
     )
 
     env.reset(seed=seed + 1)
@@ -36,10 +36,10 @@ def main(seed, save, verbose):
         eval_env,
         env.spec.reward_threshold,
         steps=50_000,
-        gradient_steps=1,
-        train_freq=1,
-        update_freq=10,
-        batch_size=64,
+        gradient_steps=200,
+        train_freq=100,
+        update_freq=2,
+        batch_size=256,
         eval_freq=1_000,
         eval_for=10,
         verbose=verbose,
