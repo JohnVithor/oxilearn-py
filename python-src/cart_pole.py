@@ -11,9 +11,10 @@ from trainer import Trainer, TrainResults
 def main():
     args = sys.argv
     seed = int(args[1])
+    verbose = int(args[2])
     torch.manual_seed(seed)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = "cpu"
 
     train_env = gym.make("CartPole-v1")
     train_env.reset(seed=seed)
@@ -21,9 +22,9 @@ def main():
     eval_env.reset(seed=seed + 1)
 
     update_strategy = EpsilonUpdateStrategy.EpsilonLinearTrainingDecreasing(
-        start=1.0, end=0.05, end_fraction=0.1
+        start=0.5, end=0.05, end_fraction=0.2
     )
-    action_selector = EpsilonGreedy(1.0, seed + 2, update_strategy)
+    action_selector = EpsilonGreedy(0.5, seed + 2, update_strategy)
 
     mem_replay = RandomExperienceBuffer(10_000, 4, 1_000, seed + 3, False, device)
 
@@ -38,7 +39,7 @@ def main():
     )
 
     optimizer = torch.optim.Adam
-    loss_fn = nn.MSELoss()
+    loss_fn = nn.HuberLoss()
 
     model = DoubleDeepAgent(
         action_selector,
@@ -46,7 +47,7 @@ def main():
         policy,
         optimizer,
         loss_fn,
-        0.005,
+        0.01,
         0.99,
         10.0,
         device,
@@ -55,7 +56,7 @@ def main():
     trainer = Trainer(train_env, eval_env)
     trainer.early_stop = lambda reward: reward >= 475.0
 
-    training_results = trainer.train_by_steps(model, 50_000, 1, 1, 32, 10, 1000, 10, 1)
+    training_results = trainer.train_by_steps(model, 50_000, 32, 64, 256, 10, 1000, 10, verbose)
     training_steps = sum(training_results[1])
 
     evaluation_results = trainer.evaluate(model, 10)
