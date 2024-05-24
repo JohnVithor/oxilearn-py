@@ -31,12 +31,7 @@ pub struct CartPole {
 }
 
 fn initialize(dist: &Uniform<f32>, rng: &mut SmallRng) -> Array1<f32> {
-    Array1::from_iter([
-        dist.sample(rng),
-        dist.sample(rng),
-        dist.sample(rng),
-        dist.sample(rng),
-    ])
+    Array1::from_iter(dist.sample_iter(rng).take(4))
 }
 
 impl CartPole {

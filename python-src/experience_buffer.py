@@ -1,12 +1,13 @@
 import torch
+from small_rng_rs import SmallRng
 import numpy as np
 from torch import tensor
 
 
 class ExperienceStats:
     def __init__(self, shape, device):
-        self.means = torch.zeros(shape, dtype=torch.float32, device=device)
-        self.msqs = torch.ones(shape, dtype=torch.float32, device=device)
+        self.means = torch.zeros(shape, dtype=torch.float64, device=device)
+        self.msqs = torch.ones(shape, dtype=torch.float64, device=device)
         self.count = torch.zeros(1, dtype=torch.int64, device=device)
 
     def push(self, value):
@@ -27,19 +28,19 @@ class RandomExperienceBuffer:
     def __init__(self, capacity, obs_size, minsize, seed, normalize_obs, device):
         self.obs_size = obs_size
         self.curr_states = torch.empty(
-            (capacity, obs_size), dtype=torch.float32, device=device
+            (capacity, obs_size), dtype=torch.float64, device=device
         )
         self.curr_actions = torch.empty(capacity, dtype=torch.int64, device=device)
-        self.rewards = torch.empty(capacity, dtype=torch.float32, device=device)
+        self.rewards = torch.empty(capacity, dtype=torch.float64, device=device)
         self.next_states = torch.empty(
-            (capacity, obs_size), dtype=torch.float32, device=device
+            (capacity, obs_size), dtype=torch.float64, device=device
         )
         self.dones = torch.empty(capacity, dtype=torch.int8, device=device)
         self.capacity = capacity
         self.next_idx = 0
         self.size = 0
         self.minsize = minsize
-        self.rng = np.random.default_rng(seed)
+        self.rng = SmallRng(seed)
         self.device = device
         self.stats = ExperienceStats(obs_size, device)
         self.normalize_obs = normalize_obs
@@ -50,7 +51,7 @@ class RandomExperienceBuffer:
     def add(self, curr_state, curr_action, reward, done, next_state):
         curr_state = curr_state.to(self.device)
         curr_action = tensor(curr_action, dtype=torch.int64, device=self.device)
-        reward = tensor(reward, dtype=torch.float32, device=self.device)
+        reward = tensor(reward, dtype=torch.float64, device=self.device)
         done = tensor(done, dtype=torch.int8, device=self.device)
         next_state = next_state.to(self.device)
 
@@ -74,7 +75,7 @@ class RandomExperienceBuffer:
             return values
 
     def sample_batch(self, size):
-        indices = self.rng.integers(0, self.size, size=size)
+        indices = self.rng.integers(0, self.size, size)
         indices = tensor(indices, dtype=torch.int64, device=self.device)
         return (
             self.normalize(self.curr_states[indices]),

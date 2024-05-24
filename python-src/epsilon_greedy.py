@@ -1,4 +1,4 @@
-import numpy as np
+from small_rng_rs import SmallRng
 import torch
 from typing import Callable, Union
 from dataclasses import dataclass
@@ -72,7 +72,7 @@ class EpsilonGreedy:
     ):
         self.initial_epsilon = epsilon
         self.current_epsilon = epsilon
-        self.rng = np.random.default_rng(seed)
+        self.rng = SmallRng(seed)
         self.update_strategy = update_strategy
 
     @classmethod
@@ -82,12 +82,12 @@ class EpsilonGreedy:
     def should_explore(self) -> bool:
         return (
             self.current_epsilon != 0.0
-            and self.rng.uniform(0.0, 1.0) <= self.current_epsilon
+            and self.rng.uniform(0.0, 1.0, 1)[0] <= self.current_epsilon
         )
 
     def get_action(self, values: torch.Tensor) -> int:
         if self.should_explore():
-            return self.rng.integers(0, values.size(0))
+            return self.rng.integers(0, values.size(0), 1)[0]
         else:
             return int(torch.argmax(values).item())
 
