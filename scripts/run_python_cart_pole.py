@@ -57,7 +57,7 @@ def main(seed, save, verbose):
         verbose=verbose,
     )
 
-    model.learn(total_timesteps=5e4, callback=[eval_callback])
+    model.learn(total_timesteps=50_000, callback=[eval_callback])
 
     if save:
         os.mkdir("./safetensors-python")
