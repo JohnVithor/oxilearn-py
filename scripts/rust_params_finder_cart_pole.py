@@ -19,16 +19,16 @@ def create_objective(env_name, seed, verbose):
         eval_size = 10
         eval_freq = 1_000
 
-        env = gym.make("LunarLander-v2")
-        eval_env = gym.make("LunarLander-v2")
+        env = gym.make("CartPole-v1")
+        eval_env = gym.make("CartPole-v1")
 
         learning_rate = trial.suggest_float("learning_rate", 0.00001, 0.1)
         batch_size = trial.suggest_int("batch_size", 16, 256)
         buffer_size = trial.suggest_int("buffer_size", 1_000, 100_000)
-        min_buffer_size = trial.suggest_int("min_buffer_size", 1_000, 10_000)
-        target_update_interval = trial.suggest_int("target_update_interval", 1, 256)
-        train_freq = trial.suggest_int("train_freq", 1, 256)
-        gradient_steps = trial.suggest_int("gradient_steps", 1, 256)
+        min_buffer_size = trial.suggest_int("min_buffer_size", 256, 10_000)
+        target_update_interval = trial.suggest_int("target_update_interval", 2, 100)
+        train_freq = 1
+        gradient_steps = 1
         exploration_initial_eps = trial.suggest_float(
             "exploration_initial_eps", 0.5, 1.0
         )

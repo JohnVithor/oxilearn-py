@@ -28,16 +28,16 @@ def main(seed, save, verbose):
     model = DQN(
         policy="MlpPolicy",
         env=vec_env,
-        learning_rate=2.3e-3,
-        batch_size=64,
+        learning_rate=6.3e-4,
+        batch_size=128,
         buffer_size=100_000,
-        learning_starts=1_000,
+        learning_starts=1000,
         gamma=0.99,
         target_update_interval=10,
-        train_freq=256,
+        train_freq=128,
         gradient_steps=128,
-        exploration_initial_eps=1.0,
-        exploration_fraction=0.16,
+        exploration_initial_eps=1.00,
+        exploration_fraction=0.5,
         exploration_final_eps=0.04,
         seed=seed,
         policy_kwargs={"net_arch": [256, 256]},
@@ -57,7 +57,7 @@ def main(seed, save, verbose):
         verbose=verbose,
     )
 
-    model.learn(total_timesteps=5e4, callback=[eval_callback])
+    model.learn(total_timesteps=1e5, callback=[eval_callback])
 
     if save:
         os.mkdir("./safetensors-python")

@@ -31,6 +31,7 @@ pub struct DQN {
     max_grad_norm: f64,
     agent: Option<DoubleDeepAgent>,
     rng: SmallRng,
+    normalize_obs: bool,
     optimizer: OptimizerEnum,
     loss_fn: fn(&Tensor, &Tensor) -> Tensor,
 }
@@ -63,6 +64,7 @@ impl DQN {
         exploration_fraction=0.05,
         max_grad_norm=10.0,
         seed=0,
+        normalize_obs=false,
         optimizer="Adam",
         // optimizer_info=HashMap::default(),
         loss_fn="MSE"
@@ -80,59 +82,63 @@ impl DQN {
         exploration_fraction: f32,
         max_grad_norm: f64,
         seed: u64,
+        normalize_obs:bool,
         optimizer: &str,
         // optimizer_info: HashMap<String, String>,
         loss_fn: &str,
+        py: Python,
     ) -> PyResult<Self> {
-        let mut rng: SmallRng = SmallRng::seed_from_u64(seed);
-        tch::manual_seed(rng.next_u64() as i64);
-        tch::maybe_init_cuda();
-
-        let optimizer_info = match optimizer {
-            "Adam" => Some(OptimizerEnum::Adam(Adam::default())),
-            "Sgd" => Some(OptimizerEnum::Sgd(Sgd::default())),
-            "RmsProp" => Some(OptimizerEnum::RmsProp(RmsProp::default())),
-            "AdamW" => Some(OptimizerEnum::AdamW(AdamW::default())),
-            _ => None,
-        };
-
-        let Some(optimizer) = optimizer_info else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid optimizer option '{optimizer}' valid options are: 'Adam', 'Sgd', 'RmsProp' and 'AdamW'"
-            )));
-        };
-
-        let loss_fn_info: Option<fn(&Tensor, &Tensor) -> Tensor> = match loss_fn {
-            "MAE" => Some(mae),
-            "MSE" => Some(mse),
-            "RMSE" => Some(rmse),
-            "Huber" => Some(huber),
-            "smooth_l1" => Some(smooth_l1),
-            _ => None,
-        };
-
-        let Some(loss_fn) = loss_fn_info else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid loss_fn option '{loss_fn}' valid options are: 'MAE','MSE', 'RMSE', 'Huber' and smooth_l1"
-            )));
-        };
-
-        Ok(Self {
-            net_arch,
-            last_activation: DQN::get_activation(last_activation),
-            initial_epsilon,
-            final_epsilon,
-            exploration_fraction,
-            memory_size,
-            min_memory_size,
-            learning_rate,
-            discount_factor,
-            max_grad_norm,
-            agent: None,
-            rng,
-            optimizer,
-            loss_fn,
-        })
+        py.allow_threads(|| -> PyResult<Self> {
+            let mut rng: SmallRng = SmallRng::seed_from_u64(seed);
+            tch::manual_seed(rng.next_u64() as i64);
+            tch::maybe_init_cuda();
+    
+            let optimizer_info = match optimizer {
+                "Adam" => Some(OptimizerEnum::Adam(Adam::default())),
+                "Sgd" => Some(OptimizerEnum::Sgd(Sgd::default())),
+                "RmsProp" => Some(OptimizerEnum::RmsProp(RmsProp::default())),
+                "AdamW" => Some(OptimizerEnum::AdamW(AdamW::default())),
+                _ => None,
+            };
+    
+            let Some(optimizer) = optimizer_info else {
+                return Err(PyValueError::new_err(format!(
+                    "Invalid optimizer option '{optimizer}' valid options are: 'Adam', 'Sgd', 'RmsProp' and 'AdamW'"
+                )));
+            };
+    
+            let loss_fn_info: Option<fn(&Tensor, &Tensor) -> Tensor> = match loss_fn {
+                "MAE" => Some(mae),
+                "MSE" => Some(mse),
+                "RMSE" => Some(rmse),
+                "Huber" => Some(huber),
+                "smooth_l1" => Some(smooth_l1),
+                _ => None,
+            };
+    
+            let Some(loss_fn) = loss_fn_info else {
+                return Err(PyValueError::new_err(format!(
+                    "Invalid loss_fn option '{loss_fn}' valid options are: 'MAE','MSE', 'RMSE', 'Huber' and smooth_l1"
+                )));
+            };
+    
+            Ok(Self {
+                net_arch,
+                last_activation: DQN::get_activation(last_activation),
+                initial_epsilon,
+                final_epsilon,
+                exploration_fraction,
+                memory_size,
+                min_memory_size,
+                learning_rate,
+                discount_factor,
+                max_grad_norm,
+                agent: None,
+                rng,
+                optimizer,
+                normalize_obs,
+                loss_fn,
+            })})
     }
 
     #[pyo3(signature = ())]
@@ -165,59 +171,58 @@ impl DQN {
     }
 
     #[pyo3(signature = (environment))]
-    pub fn prepare(&mut self, environment: Bound<PyAny>, py: Python<'_>) -> PyResult<()> {
+    pub fn prepare(&mut self, environment: Bound<PyAny>) -> PyResult<()> {
         let environment = PyEnv::new(environment)?;
-        self.create_agent(&environment, py)?;
+        self.create_agent(&environment)?;
         Ok(())
     }
 
-    fn create_agent(&mut self, environment: &PyEnv, py: Python<'_>) -> PyResult<()> {
-        let input = match environment.observation_space(py).unwrap() {
+    fn create_agent(&mut self, environment: &PyEnv) -> PyResult<()> {
+        let input = match environment.observation_space().unwrap() {
             SpaceInfo::Discrete(_) => Err(PyTypeError::new_err("ambiente inválido")),
             SpaceInfo::Continuous(s) => Ok(s.len()),
         }? as i64;
-        let output = match environment.action_space(py).unwrap() {
+        let output = match environment.action_space().unwrap() {
             SpaceInfo::Discrete(n) => Ok(n),
             SpaceInfo::Continuous(_) => Err(PyTypeError::new_err("ambiente inválido")),
         }? as i64;
-        self.agent = py.allow_threads(|| {
-            let mem_replay = RandomExperienceBuffer::new(
-                self.memory_size,
-                input,
-                self.min_memory_size,
-                self.rng.next_u64(),
-                Device::cuda_if_available(),
-            );
+        let mem_replay = RandomExperienceBuffer::new(
+            self.memory_size,
+            input,
+            self.min_memory_size,
+            self.rng.next_u64(),
+            self.normalize_obs,
+            Device::cuda_if_available(),
+        );
 
-            let action_selector = EpsilonGreedy::new(
-                self.initial_epsilon,
-                self.rng.next_u64(),
-                EpsilonUpdateStrategy::EpsilonLinearTrainingDecreasing {
-                    start: self.initial_epsilon,
-                    end: self.final_epsilon,
-                    end_fraction: self.exploration_fraction,
-                },
-            );
+        let action_selector = EpsilonGreedy::new(
+            self.initial_epsilon,
+            self.rng.next_u64(),
+            EpsilonUpdateStrategy::EpsilonLinearTrainingDecreasing {
+                start: self.initial_epsilon,
+                end: self.final_epsilon,
+                end_fraction: self.exploration_fraction,
+            },
+        );
 
-            let info = self
-                .net_arch
-                .iter()
-                .map(|(n, func)| (*n, Self::get_activation(func)))
-                .collect();
+        let info = self
+            .net_arch
+            .iter()
+            .map(|(n, func)| (*n, Self::get_activation(func)))
+            .collect();
 
-            let arch = generate_policy(info, self.last_activation, input, output).unwrap();
-            Some(DoubleDeepAgent::new(
-                action_selector,
-                mem_replay,
-                arch,
-                self.optimizer,
-                self.loss_fn,
-                self.learning_rate,
-                self.discount_factor,
-                self.max_grad_norm,
-                Device::cuda_if_available(),
-            ))
-        });
+        let arch = generate_policy(info, self.last_activation, input, output).unwrap();
+        self.agent = Some(DoubleDeepAgent::new(
+            action_selector,
+            mem_replay,
+            arch,
+            self.optimizer,
+            self.loss_fn,
+            self.learning_rate,
+            self.discount_factor,
+            self.max_grad_norm,
+            Device::cuda_if_available(),
+        ));
         Ok(())
     }
 
@@ -234,6 +239,7 @@ impl DQN {
         eval_for=10,
         verbose=0
     ))]
+    
     #[allow(clippy::too_many_arguments)]
     pub fn train(
         &mut self,
@@ -248,15 +254,14 @@ impl DQN {
         eval_freq: u32,
         eval_for: u32,
         verbose: usize,
-        py: Python<'_>,
+        py: Python,
     ) -> PyResult<TrainResults> {
         let env = PyEnv::new(env)?;
         let eval_env = PyEnv::new(eval_env)?;
         if self.agent.is_none() {
-            self.create_agent(&env, py)?;
+            self.create_agent(&env)?;
         }
-
-        py.allow_threads(|| {
+        py.allow_threads(|| ->PyResult<TrainResults> {
             let mut trainer = Trainer::new(env, eval_env).unwrap();
             trainer.early_stop = Some(Box::new(move |reward| reward >= solve_with));
             let r: Result<TrainResults, OxiLearnErr> = trainer.train_by_steps(
@@ -276,19 +281,13 @@ impl DQN {
 
     #[pyo3(signature = (env, n_eval_episodes))]
     #[allow(clippy::too_many_arguments)]
-    pub fn evaluate(
-        &mut self,
-        env: Bound<PyAny>,
-        n_eval_episodes: u32,
-        py: Python<'_>,
-    ) -> PyResult<(f32, f32)> {
+    pub fn evaluate(&mut self, env: Bound<PyAny>, n_eval_episodes: u32, py: Python) -> PyResult<(f32, f32)> {
         let train_env = PyEnv::new(env.clone())?;
         let eval_env = PyEnv::new(env)?;
         if self.agent.is_none() {
-            self.create_agent(&train_env, py)?;
+            self.create_agent(&train_env)?;
         }
-
-        py.allow_threads(|| {
+        py.allow_threads(|| -> PyResult<(f32, f32)> {
             let mut trainer = Trainer::new(train_env, eval_env).unwrap();
             let r = trainer.evaluate(self.agent.as_mut().unwrap(), n_eval_episodes);
             let rewards = r.unwrap().0;

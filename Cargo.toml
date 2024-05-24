@@ -13,6 +13,4 @@ pyo3 = { version = "0.21", features = ["extension-module"] }
 numpy = "0.21"
 tch = { version = "0.16", features = ["python-extension"] }
 rand = { version="0.8", features = ["small_rng"] }
-
-[dev-dependencies]
 torch-sys = { version = "0.16", features = ["python-extension"] }

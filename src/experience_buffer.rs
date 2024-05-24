@@ -1,12 +1,45 @@
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use tch::{Device, IndexOp, Kind, Tensor};
+use tch::{Device, IndexOp, Kind, Scalar, Tensor};
+use torch_sys::IntList;
+
+pub struct ExperienceStats {
+    means: Tensor,
+    msqs: Tensor,
+    count: Tensor,
+}
+
+impl ExperienceStats {
+    pub fn new(shape: impl IntList + Copy, device: Device) -> Self {
+        Self {
+            means: Tensor::zeros(shape, (Kind::Float, device)),
+            msqs: Tensor::ones(shape, (Kind::Float, device)),
+            count: Tensor::zeros(1, (Kind::Int64, device)),
+        }
+    }
+
+    pub fn push(&mut self, value: &Tensor) {
+        self.count += 1;
+        let delta = value - &self.means;
+        self.means += &delta / &self.count;
+        let delta2 = value - &self.means;
+        self.msqs += delta * delta2;
+    }
+
+    pub fn mean(&self) -> &Tensor {
+        &self.means
+    }
+
+    pub fn var(&self) -> Tensor {
+        &self.msqs / Scalar::float((self.count.int64_value(&[0]) - 1) as f64)
+    }
+}
 
 pub struct RandomExperienceBuffer {
     obs_size: i64,
-    curr_states: Tensor,
+    pub curr_states: Tensor,
     curr_actions: Tensor,
     rewards: Tensor,
-    next_states: Tensor,
+    pub next_states: Tensor,
     dones: Tensor,
     size: i64,
     next_idx: i64,
@@ -14,29 +47,19 @@ pub struct RandomExperienceBuffer {
     minsize: i64,
     rng: SmallRng,
     device: Device,
-}
-
-impl Default for RandomExperienceBuffer {
-    fn default() -> Self {
-        Self {
-            obs_size: 1,
-            curr_states: Tensor::new(),
-            curr_actions: Tensor::new(),
-            rewards: Tensor::new(),
-            next_states: Tensor::new(),
-            dones: Tensor::new(),
-            size: 0,
-            next_idx: 0,
-            capacity: 10_000,
-            minsize: 1_000,
-            rng: SmallRng::seed_from_u64(42),
-            device: Device::cuda_if_available(),
-        }
-    }
+    pub stats: ExperienceStats,
+    normalize_obs: bool,
 }
 
 impl RandomExperienceBuffer {
-    pub fn new(capacity: i64, obs_size: i64, minsize: i64, seed: u64, device: Device) -> Self {
+    pub fn new(
+        capacity: i64,
+        obs_size: i64,
+        minsize: i64,
+        seed: u64,
+        normalize_obs: bool,
+        device: Device,
+    ) -> Self {
         Self {
             obs_size,
             curr_states: Tensor::empty([capacity, obs_size], (Kind::Float, device)),
@@ -50,6 +73,8 @@ impl RandomExperienceBuffer {
             minsize,
             rng: SmallRng::seed_from_u64(seed),
             device,
+            stats: ExperienceStats::new(obs_size, device),
+            normalize_obs,
         }
     }
 
@@ -86,6 +111,20 @@ impl RandomExperienceBuffer {
 
         self.next_idx = (self.next_idx + 1) % self.capacity;
         self.size = self.capacity.min(self.size + 1);
+
+        if self.normalize_obs {
+            self.stats.push(curr_state);
+        }
+    }
+
+    pub fn normalize(&self, values: Tensor) -> Tensor {
+        // let (var, mean) = self.curr_states.var_mean_dim(0, false, false);
+        // ((values - mean) / var.sqrt()).to_device(self.device)
+        if self.normalize_obs {
+            (values - self.stats.mean()) / (self.stats.var()).sqrt()
+        } else {
+            values
+        }
     }
 
     pub fn sample_batch(&mut self, size: usize) -> (Tensor, Tensor, Tensor, Tensor, Tensor) {
@@ -93,20 +132,11 @@ impl RandomExperienceBuffer {
             .map(|_| self.rng.gen_range(0..self.size))
             .collect();
         (
-            self.curr_states.i(index.clone()).to_device(self.device),
-            self.curr_actions
-                .i(index.clone())
-                .reshape([-1, 1])
-                .to_device(self.device),
-            self.rewards
-                .i(index.clone())
-                .reshape([-1, 1])
-                .to_device(self.device),
-            self.dones
-                .i(index.clone())
-                .reshape([-1, 1])
-                .to_device(self.device),
-            self.next_states.i(index).to_device(self.device),
+            self.normalize(self.curr_states.i(index.clone())),
+            self.curr_actions.i(index.clone()).reshape([-1, 1]),
+            self.rewards.i(index.clone()).reshape([-1, 1]),
+            self.dones.i(index.clone()).reshape([-1, 1]),
+            self.normalize(self.next_states.i(index)),
         )
     }
 }
