@@ -25,11 +25,11 @@ def main():
     eval_env.reset(seed=seed + 1)
 
     update_strategy = EpsilonUpdateStrategy.EpsilonLinearTrainingDecreasing(
-        start=0.5, end=0.05, end_fraction=0.2
+        start=1.0, end=0.04, end_fraction=0.16
     )
-    action_selector = EpsilonGreedy(0.5, seed + 2, update_strategy)
+    action_selector = EpsilonGreedy(1.0, seed + 2, update_strategy)
 
-    mem_replay = RandomExperienceBuffer(10_000, 4, 1_000, seed + 3, False, device)
+    mem_replay = RandomExperienceBuffer(10, 4, 1, seed + 3, False, device)
 
     policy = generate_policy(
         [
@@ -42,7 +42,7 @@ def main():
     )
 
     optimizer = torch.optim.Adam
-    loss_fn = nn.HuberLoss()
+    loss_fn = nn.SmoothL1Loss()
 
     model = DoubleDeepAgent(
         action_selector,
@@ -50,17 +50,18 @@ def main():
         policy,
         optimizer,
         loss_fn,
-        0.01,
+        0.0023,
         0.99,
         10.0,
         device,
     )
+    model.save_net("./safetensors-python/cart_pole")
 
     trainer = Trainer(train_env, eval_env)
     trainer.early_stop = lambda reward: reward >= 475.0
 
     training_results = trainer.train_by_steps(
-        model, 50_000, 32, 64, 256, 10, 1000, 10, verbose
+        model, 100, 1, 100, 1, 10, 100, 10, verbose
     )
     training_steps = sum(training_results[1])
 

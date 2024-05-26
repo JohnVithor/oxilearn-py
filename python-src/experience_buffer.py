@@ -78,9 +78,9 @@ class RandomExperienceBuffer:
         indices = self.rng.integers(0, self.size, size)
         indices = tensor(indices, dtype=torch.int64, device=self.device)
         return (
-            self.normalize(self.curr_states[indices]),
+            self.normalize(self.curr_states[indices]).float(),
             self.curr_actions[indices].reshape(-1, 1),
             self.rewards[indices].reshape(-1, 1),
             self.dones[indices].reshape(-1, 1),
-            self.normalize(self.next_states[indices]),
+            self.normalize(self.next_states[indices]).float(),
         )

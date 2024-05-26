@@ -6,6 +6,6 @@ edition = "2021"
 
 [dependencies]
 ndarray = "0.15"
-tch = { version = "0.16" }
-rand = { version="0.8", features = ["small_rng"] }
-torch-sys = { version = "0.16" }
+tch = { version = "0.16", features = ["download-libtorch"] }
+rand = { version = "0.8", features = ["small_rng"] }
+torch-sys = { version = "0.16", features = ["download-libtorch"] }

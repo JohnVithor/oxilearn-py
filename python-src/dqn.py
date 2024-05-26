@@ -6,19 +6,20 @@ from torch.nn import functional as F
 from experience_buffer import RandomExperienceBuffer
 from epsilon_greedy import EpsilonGreedy
 from typing import List, Callable, Tuple
+from safetensors.torch import load_file, save_file
 
 ActivationFunction = Callable[[torch.Tensor], torch.Tensor]
 
 
-class PolicyGenerator(nn.Module):
-    def __init__(
-        self,
-        net_arch: List[Tuple[int, ActivationFunction]],
-        last_activation: ActivationFunction,
-        input_dim: int,
-        output_dim: int,
-    ):
-        super(PolicyGenerator, self).__init__()
+def generate_policy(
+    net_arch: List[Tuple[int, ActivationFunction]],
+    last_activation: ActivationFunction,
+    input_dim: int,
+    output_dim: int,
+) -> Callable[[str, torch.device], nn.Module]:
+    def policy_generator(
+        device: torch.device,
+    ) -> Tuple[nn.Module, torch.optim.Optimizer]:
         layers = []
         previous = input_dim
         for i, (neurons, activation) in enumerate(net_arch):
@@ -27,25 +28,7 @@ class PolicyGenerator(nn.Module):
             previous = neurons
         layers.append(nn.Linear(previous, output_dim))
         layers.append(last_activation)
-        self.model = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.model(x)
-
-
-def generate_policy(
-    net_arch: List[Tuple[int, ActivationFunction]],
-    last_activation: ActivationFunction,
-    input_dim: int,
-    output_dim: int,
-) -> Callable[[str, torch.device], Tuple[nn.Module, torch.optim.Optimizer]]:
-    def policy_generator(
-        name: str, device: torch.device
-    ) -> Tuple[nn.Module, torch.optim.Optimizer]:
-        model = PolicyGenerator(net_arch, last_activation, input_dim, output_dim).to(
-            device
-        )
-        return model
+        return nn.Sequential(*layers).to(device)
 
     return policy_generator
 
@@ -104,8 +87,8 @@ class DoubleDeepAgent:
         max_grad_norm,
         device,
     ):
-        self.policy_net = generate_policy("q_net", device)
-        self.target_net = generate_policy("q_net", device)
+        self.policy_net = generate_policy(device)
+        self.target_net = generate_policy(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.optimizer = opt(self.policy_net.parameters(), learning_rate)
@@ -136,13 +119,16 @@ class DoubleDeepAgent:
         return self.memory.sample_batch(size)
 
     def batch_qvalues(self, b_states, b_actions):
-        return self.policy_net(b_states).gather(1, b_actions.long()).float()
+        return self.policy_net(b_states.float()).gather(1, b_actions.long()).float()
 
     def batch_expected_values(self, b_state_, b_reward, b_done):
         with torch.no_grad():
-            best_target_qvalues = self.target_net(b_state_).max(dim=1, keepdim=True)[0]
+            best_target_qvalues = self.target_net(b_state_.float()).max(
+                dim=1, keepdim=True
+            )[0]
         return (
-            b_reward + self.discount_factor * (1 - b_done.float()) * best_target_qvalues
+            b_reward.float()
+            + self.discount_factor * (1.0 - b_done.float()) * best_target_qvalues
         ).float()
 
     def optimize(self, loss):
@@ -157,11 +143,13 @@ class DoubleDeepAgent:
         values = []
         for _ in range(gradient_steps):
             b_state, b_action, b_reward, b_done, b_state_ = self.get_batch(batch_size)
+            print(b_state)
             policy_qvalues = self.batch_qvalues(b_state, b_action)
             expected_values = self.batch_expected_values(b_state_, b_reward, b_done)
             loss = self.loss_fn(policy_qvalues, expected_values)
+            print(loss)
             self.optimize(loss)
-            values.append(expected_values.mean().item())
+            values.append(expected_values.mean().float().item())
         return sum(values) / len(values)
 
     def action_selection_update(self, current_training_progress, epi_reward):
@@ -175,18 +163,15 @@ class DoubleDeepAgent:
 
     def save_net(self, path):
         os.makedirs(path, exist_ok=True)
-        torch.save(
-            self.policy_vs.state_dict(), os.path.join(path, "policy_weights.pth")
-        )
-        torch.save(
-            self.target_policy_vs.state_dict(),
-            os.path.join(path, "target_policy_weights.pth"),
+        save_file(self.policy_net.state_dict(), f"{path}/policy_weights.safetensors")
+        save_file(
+            self.target_net.state_dict(), f"{path}/target_policy_weights.safetensors"
         )
 
     def load_net(self, path):
-        self.policy_vs.load_state_dict(
+        self.policy_net.load_state_dict(
             torch.load(os.path.join(path, "policy_weights.pth"))
         )
-        self.target_policy_vs.load_state_dict(
+        self.target_net.load_state_dict(
             torch.load(os.path.join(path, "target_policy_weights.pth"))
         )

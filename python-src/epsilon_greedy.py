@@ -25,7 +25,6 @@ class EpsilonUpdateStrategy:
         end_fraction: float
 
     def update(
-        self,
         strategy,
         current_epsilon: float,
         current_training_progress: float,
@@ -89,7 +88,7 @@ class EpsilonGreedy:
         if self.should_explore():
             return self.rng.integers(0, values.size(0), 1)[0]
         else:
-            return int(torch.argmax(values).item())
+            return int(torch.argmax(values, keepdim=True).item())
 
     def get_epsilon(self) -> float:
         return self.current_epsilon
@@ -98,7 +97,7 @@ class EpsilonGreedy:
         self.current_epsilon = self.initial_epsilon
 
     def update(self, current_training_progress: float, epi_reward: float):
-        self.current_epsilon = EpsilonUpdateStrategy().update(
+        self.current_epsilon = EpsilonUpdateStrategy.update(
             self.update_strategy,
             self.current_epsilon,
             current_training_progress,

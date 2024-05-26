@@ -56,6 +56,7 @@ impl Trainer {
             curr_obs = next_obs;
 
             if step % train_freq == 0 {
+                println!("train_freq {train_freq}");
                 if let Some(td) = agent.update(gradient_steps, batch_size) {
                     training_error.push(td)
                 }

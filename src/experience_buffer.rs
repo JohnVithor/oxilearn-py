@@ -132,11 +132,13 @@ impl RandomExperienceBuffer {
             .map(|_| self.rng.gen_range(0..self.size))
             .collect();
         (
-            self.normalize(self.curr_states.i(index.clone())),
+            self.normalize(self.curr_states.i(index.clone()))
+                .to_kind(Kind::Float),
             self.curr_actions.i(index.clone()).reshape([-1, 1]),
             self.rewards.i(index.clone()).reshape([-1, 1]),
             self.dones.i(index.clone()).reshape([-1, 1]),
-            self.normalize(self.next_states.i(index)),
+            self.normalize(self.next_states.i(index))
+                .to_kind(Kind::Float),
         )
     }
 }
