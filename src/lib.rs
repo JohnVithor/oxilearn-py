@@ -43,7 +43,7 @@ pub fn generate_policy(
                         neurons,
                         Default::default(),
                     ))
-                    .add_fn(activation);
+                    .add(nn::func(activation));
                 previous = neurons;
             }
             policy_net = policy_net
@@ -53,7 +53,7 @@ pub fn generate_policy(
                     output,
                     Default::default(),
                 ))
-                .add_fn(last_activation);
+                .add(nn::func(last_activation));
             (Box::new(policy_net), mem_policy)
         },
     ))

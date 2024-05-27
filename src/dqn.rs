@@ -1,10 +1,11 @@
 use crate::{
-    epsilon_greedy::EpsilonGreedy, experience_buffer::RandomExperienceBuffer, PolicyGenerator,
+    epsilon_greedy::EpsilonGreedy, experience_buffer::RandomExperienceBuffer,
+    trainer::print_python_like, PolicyGenerator,
 };
 use std::fs;
 use tch::{
     nn::{Adam, AdamW, Module, Optimizer, OptimizerConfig, RmsProp, Sgd, VarStore},
-    COptimizer, Device, Kind, TchError, Tensor,
+    COptimizer, Device, IndexOp, Kind, TchError, Tensor,
 };
 
 pub fn mae(values: &Tensor, expected_values: &Tensor) -> Tensor {
@@ -160,14 +161,12 @@ impl DoubleDeepAgent {
     pub fn update(&mut self, gradient_steps: u32, batch_size: usize) -> Option<f32> {
         let mut values = vec![];
         if self.memory.ready() {
-            println!("grad {gradient_steps}");
             for _ in 0..gradient_steps {
                 let (b_state, b_action, b_reward, b_done, b_state_) = self.get_batch(batch_size);
-                b_state.print();
+                print_python_like(&b_state.i(0));
                 let policy_qvalues = self.batch_qvalues(&b_state, &b_action);
                 let expected_values = self.batch_expected_values(&b_state_, &b_reward, &b_done);
                 let loss = (self.loss_fn)(&policy_qvalues, &expected_values);
-                println!("{loss}");
                 self.optimize(loss);
                 values.push(expected_values.mean(Kind::Float).try_into().unwrap())
             }

@@ -40,6 +40,7 @@ class Trainer:
         for step in range(1, n_steps + 1):
             action_counter += 1
             curr_action = agent.get_action(curr_obs)
+            print(curr_action)
             next_obs, reward, done, truncated, _ = self.env.step(curr_action)
             next_obs = torch.tensor(next_obs, dtype=torch.float32)
 

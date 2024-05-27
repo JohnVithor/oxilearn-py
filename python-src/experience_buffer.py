@@ -76,6 +76,7 @@ class RandomExperienceBuffer:
 
     def sample_batch(self, size):
         indices = self.rng.integers(0, self.size, size)
+        print(indices)
         indices = tensor(indices, dtype=torch.int64, device=self.device)
         return (
             self.normalize(self.curr_states[indices]).float(),

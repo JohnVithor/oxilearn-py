@@ -47,6 +47,7 @@ impl Trainer {
         for step in 1..=n_steps {
             action_counter += 1;
             let curr_action = agent.get_action(&curr_obs);
+            println!("{curr_action}");
             let (next_obs, reward, done, truncated) = self.env.step(curr_action).unwrap();
             let next_obs: Tensor = Tensor::try_from(next_obs).unwrap();
 
@@ -56,7 +57,6 @@ impl Trainer {
             curr_obs = next_obs;
 
             if step % train_freq == 0 {
-                println!("train_freq {train_freq}");
                 if let Some(td) = agent.update(gradient_steps, batch_size) {
                     training_error.push(td)
                 }
@@ -83,7 +83,7 @@ impl Trainer {
                     / (eval_lengths.len() as f32);
                 if verbose > 0 {
                     println!(
-                        "steps number: {step} - eval reward: {reward_avg} - epsilon: {}",
+                        "steps number: {step} - eval reward: {reward_avg} - epsilon: {:.1}",
                         agent.get_epsilon()
                     );
                 }
@@ -137,4 +137,25 @@ impl Trainer {
         }
         Ok((reward_history, episode_length))
     }
+}
+
+pub fn print_python_like(tensor: &Tensor) {
+    let shape = tensor.size();
+    let mut s = String::from("tensor([");
+    for i in 0..shape[0] - 1 {
+        let v = tensor.double_value(&[i as i64]);
+        if v > 0.0 {
+            s.push_str(&format!(" {:.4}, ", v));
+        } else {
+            s.push_str(&format!("{:.4}, ", v));
+        }
+    }
+    let v = tensor.double_value(&[shape[0] - 1 as i64]);
+    if v > 0.0 {
+        s.push_str(&format!(" {:.4}", v));
+    } else {
+        s.push_str(&format!("{:.4}", v));
+    }
+    s.push_str("])");
+    println!("{}", s);
 }

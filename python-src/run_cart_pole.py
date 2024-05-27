@@ -15,7 +15,8 @@ def main():
     verbose = int(args[2])
     torch.manual_seed(seed)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = "cpu"
 
     # train_env = gym.make("CartPole-v1")
     train_env = CartPoleEnv()
@@ -32,17 +33,14 @@ def main():
     mem_replay = RandomExperienceBuffer(10, 4, 1, seed + 3, False, device)
 
     policy = generate_policy(
-        [
-            (256, nn.ReLU()),
-            (256, nn.ReLU()),
-        ],
+        [],
         nn.Identity(),
         4,
         2,
     )
 
     optimizer = torch.optim.Adam
-    loss_fn = nn.SmoothL1Loss()
+    loss_fn = nn.MSELoss()
 
     model = DoubleDeepAgent(
         action_selector,
@@ -60,12 +58,10 @@ def main():
     trainer = Trainer(train_env, eval_env)
     trainer.early_stop = lambda reward: reward >= 475.0
 
-    training_results = trainer.train_by_steps(
-        model, 100, 1, 100, 1, 10, 100, 10, verbose
-    )
+    training_results = trainer.train_by_steps(model, 10, 1, 1, 2, 10, 1, 1, verbose)
     training_steps = sum(training_results[1])
 
-    evaluation_results = trainer.evaluate(model, 10)
+    evaluation_results = trainer.evaluate(model, 1)
     rewards = evaluation_results[0]
     reward_avg = sum(rewards) / len(rewards)
     variance = sum((reward_avg - value) ** 2 for value in rewards) / len(rewards)

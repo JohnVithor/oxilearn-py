@@ -110,7 +110,6 @@ impl CartPole {
             || self.state[0] > Self::X_THRESHOLD
             || self.state[2] < -Self::THETA_THRESHOLD_RADIANS
             || self.state[2] > Self::THETA_THRESHOLD_RADIANS;
-        let reward = if !terminated { 1.0 } else { 0.0 };
-        Ok((self.state.clone().into_dyn(), reward, terminated, false))
+        Ok((self.state.clone().into_dyn(), 1.0, terminated, false))
     }
 }
