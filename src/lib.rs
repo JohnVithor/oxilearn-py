@@ -19,7 +19,7 @@ pub enum OxiLearnErr {
     EnvNotSupported,
 }
 
-type PolicyGenerator = dyn Fn(&str, Device) -> (Box<dyn Module>, VarStore);
+type PolicyGenerator = dyn Fn(Device) -> (Box<dyn Module>, VarStore);
 type ActivationFunction = fn(&Tensor) -> Tensor;
 
 pub fn generate_policy(
@@ -29,7 +29,7 @@ pub fn generate_policy(
     output: i64,
 ) -> Result<Box<PolicyGenerator>, OxiLearnErr> {
     Ok(Box::new(
-        move |name: &str, device: Device| -> (Box<dyn Module>, VarStore) {
+        move |device: Device| -> (Box<dyn Module>, VarStore) {
             let iter = net_arch.clone().into_iter().enumerate();
             let mut previous = input;
             let mem_policy = VarStore::new(device);
@@ -38,7 +38,7 @@ pub fn generate_policy(
             for (i, (neurons, activation)) in iter {
                 policy_net = policy_net
                     .add(nn::linear(
-                        &mem_policy.root() / name / format!("{}", i * 2),
+                        &mem_policy.root() / format!("{}", i * 2),
                         previous,
                         neurons,
                         Default::default(),
@@ -48,7 +48,7 @@ pub fn generate_policy(
             }
             policy_net = policy_net
                 .add(nn::linear(
-                    &mem_policy.root() / name / format!("{}", net_arch.len() * 2),
+                    &mem_policy.root() / format!("{}", net_arch.len() * 2),
                     previous,
                     output,
                     Default::default(),

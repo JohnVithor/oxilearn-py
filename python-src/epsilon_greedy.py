@@ -80,15 +80,15 @@ class EpsilonGreedy:
 
     def should_explore(self) -> bool:
         rng = self.rng.uniform(0.0, 1.0, 1)[0]
-        print(round(rng, 7))
+        # print(round(rng, 7))
         r = self.current_epsilon != 0.0 and rng <= self.current_epsilon
-        print(r)
+        # print(r)
         return r
 
     def get_action(self, values: torch.Tensor) -> int:
-        print(values.to("cpu"))
+        # print(values.to("cpu"))
         if self.should_explore():
-            print(values.size(0))
+            # print(values.size(0))
             v = self.rng.integer(0, values.size(0))
             return v
         else:

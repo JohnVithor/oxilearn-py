@@ -131,7 +131,7 @@ impl RandomExperienceBuffer {
         let dist: rand::distributions::Uniform<i64> =
             rand::distributions::Uniform::new(0i64, self.size as i64);
         let index: Vec<i64> = dist.sample_iter(&mut self.rng).take(size).collect();
-        println!("{index:?}");
+        // println!("{index:?}");
         (
             self.normalize(self.curr_states.i(index.clone()))
                 .to_kind(Kind::Float),

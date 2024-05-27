@@ -30,10 +30,10 @@ def main():
     )
     action_selector = EpsilonGreedy(1.0, seed + 2, update_strategy)
 
-    mem_replay = RandomExperienceBuffer(10, 4, 1, seed + 3, False, device)
+    mem_replay = RandomExperienceBuffer(100_000, 4, 1_000, seed + 3, False, device)
 
     policy = generate_policy(
-        [],
+        [(256, nn.ReLU()), (256, nn.ReLU())],
         nn.Identity(),
         4,
         2,
@@ -58,7 +58,9 @@ def main():
     trainer = Trainer(train_env, eval_env)
     trainer.early_stop = lambda reward: reward >= 475.0
 
-    training_results = trainer.train_by_steps(model, 10, 1, 1, 2, 10, 1, 1, verbose)
+    training_results = trainer.train_by_steps(
+        model, 50_000, 128, 256, 64, 10, 1000, 10, verbose
+    )
     training_steps = sum(training_results[1])
 
     evaluation_results = trainer.evaluate(model, 1)
@@ -66,6 +68,8 @@ def main():
     reward_avg = sum(rewards) / len(rewards)
     variance = sum((reward_avg - value) ** 2 for value in rewards) / len(rewards)
     std = variance**0.5
+
+    model.save_net("./safetensors-python/cart_pole_after_training")
 
     print(f"python,{seed},{training_steps},{reward_avg},{std}")
 

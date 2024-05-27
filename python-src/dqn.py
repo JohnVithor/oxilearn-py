@@ -143,7 +143,7 @@ class DoubleDeepAgent:
         values = []
         for _ in range(gradient_steps):
             b_state, b_action, b_reward, b_done, b_state_ = self.get_batch(batch_size)
-            print(b_state[0])
+            # print(b_state[0])
             policy_qvalues = self.batch_qvalues(b_state, b_action)
             expected_values = self.batch_expected_values(b_state_, b_reward, b_done)
             loss = self.loss_fn(policy_qvalues, expected_values)

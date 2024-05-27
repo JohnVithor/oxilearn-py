@@ -76,8 +76,8 @@ impl DoubleDeepAgent {
         max_grad_norm: f64,
         device: Device,
     ) -> Self {
-        let (policy_net, mem_policy) = generate_policy("q_net", device);
-        let (target_net, mut mem_target) = generate_policy("q_net", device);
+        let (policy_net, mem_policy) = generate_policy(device);
+        let (target_net, mut mem_target) = generate_policy(device);
         mem_target.copy(&mem_policy).unwrap();
         Self {
             optimizer: opt.build(&mem_policy, learning_rate).unwrap(),
@@ -163,7 +163,7 @@ impl DoubleDeepAgent {
         if self.memory.ready() {
             for _ in 0..gradient_steps {
                 let (b_state, b_action, b_reward, b_done, b_state_) = self.get_batch(batch_size);
-                print_python_like(&b_state.i(0));
+                // print_python_like(&b_state.i(0));
                 let policy_qvalues = self.batch_qvalues(&b_state, &b_action);
                 let expected_values = self.batch_expected_values(&b_state_, &b_reward, &b_done);
                 let loss = (self.loss_fn)(&policy_qvalues, &expected_values);

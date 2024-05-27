@@ -29,8 +29,14 @@ fn main() {
         };
     let action_selector = EpsilonGreedy::new(1.0, seed + 2, update_strategy);
 
-    let mem_replay = RandomExperienceBuffer::new(10, 4, 1, seed + 3, false, device);
-    let policy = generate_policy(vec![], |xs: &Tensor| xs.shallow_clone(), 4, 2).unwrap();
+    let mem_replay = RandomExperienceBuffer::new(100_000, 4, 1_000, seed + 3, false, device);
+    let policy = generate_policy(
+        vec![(256, |x: &Tensor| x.relu()), (256, |x: &Tensor| x.relu())],
+        |xs: &Tensor| xs.shallow_clone(),
+        4,
+        2,
+    )
+    .unwrap();
     let opt = oxilearn::dqn::OptimizerEnum::Adam(tch::nn::Adam::default());
     let loss_fn = |pred: &Tensor, target: &Tensor| pred.mse_loss(target, tch::Reduction::Mean);
 
@@ -51,7 +57,7 @@ fn main() {
     trainer.early_stop = Some(Box::new(move |reward| reward >= 475.0));
 
     let training_results: Result<TrainResults, OxiLearnErr> =
-        trainer.train_by_steps(&mut model, 10, 1, 1, 2, 10, 1, 1, verbose);
+        trainer.train_by_steps(&mut model, 50_000, 128, 256, 64, 10, 1000, 10, verbose);
 
     let training_steps = training_results.unwrap().1.iter().sum::<u32>();
 
@@ -67,5 +73,9 @@ fn main() {
         .sum::<f32>()
         / rewards.len() as f32;
     let std = variance.sqrt();
+    model
+        .save_net("./safetensors/cart_pole_after_training")
+        .expect("ok");
+
     println!("rust,{seed},{training_steps},{reward_avg},{std}")
 }

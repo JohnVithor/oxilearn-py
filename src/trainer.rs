@@ -47,7 +47,7 @@ impl Trainer {
         for step in 1..=n_steps {
             action_counter += 1;
             let curr_action = agent.get_action(&curr_obs);
-            println!("{curr_action}");
+            // println!("{curr_action}");
             let (next_obs, reward, done, truncated) = self.env.step(curr_action).unwrap();
             let next_obs: Tensor = Tensor::try_from(next_obs).unwrap();
 
@@ -83,7 +83,7 @@ impl Trainer {
                     / (eval_lengths.len() as f32);
                 if verbose > 0 {
                     println!(
-                        "steps number: {step} - eval reward: {reward_avg} - epsilon: {:.1}",
+                        "steps number: {step} - eval reward: {reward_avg:.1} - epsilon: {:.1}",
                         agent.get_epsilon()
                     );
                 }
