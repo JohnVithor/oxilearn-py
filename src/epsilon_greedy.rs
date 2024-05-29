@@ -1,4 +1,3 @@
-use crate::trainer::print_python_like;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use tch::Tensor;
 pub enum EpsilonUpdateStrategy {
@@ -102,10 +101,7 @@ impl EpsilonGreedy {
 
     pub fn should_explore(&mut self) -> bool {
         let rng = self.rng.gen_range(0.0..1.0);
-        // println!("{rng}");
-        let r = self.current_epsilon != 0.0 && rng <= self.current_epsilon;
-        // println!("{r}");
-        r
+        self.current_epsilon != 0.0 && rng <= self.current_epsilon
     }
 
     pub fn get_action(&mut self, values: &Tensor) -> usize {

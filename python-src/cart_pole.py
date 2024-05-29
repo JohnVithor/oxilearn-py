@@ -159,7 +159,8 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.isopen = True
         self.state = None
 
-        self.steps_beyond_terminated = None
+        self.curr_step = 0
+        self.max_steps = 500
         self.rng = SmallRng()
 
     def step(self, action):
@@ -167,6 +168,12 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             action
         ), f"{action!r} ({type(action)}) invalid"
         assert self.state is not None, "Call reset before using step method."
+        if self.curr_step >= self.max_steps:
+            obs = np.array(self.state, dtype=np.float64)
+            self.state = None
+            return obs, 0.0, False, True, {}
+        self.curr_step += 1
+
         x, x_dot, theta, theta_dot = self.state
         force = self.force_mag if action == 1 else -self.force_mag
         costheta = math.cos(theta)
@@ -230,7 +237,6 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
         if self.render_mode == "human":
             self.render()
-        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
         return np.array(self.state, dtype=np.float64), reward, terminated, False, {}
 
     def reset(
@@ -249,7 +255,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         )  # default high
         self.state = self.rng.uniform(low, high, 4)
         self.steps_beyond_terminated = None
-
+        self.curr_step = 0
         if self.render_mode == "human":
             self.render()
         return np.array(self.state, dtype=np.float64), {}

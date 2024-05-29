@@ -83,14 +83,14 @@ impl Trainer {
                     / (eval_lengths.len() as f32);
                 if verbose > 0 {
                     println!(
-                        "steps number: {step} - eval reward: {reward_avg:.1} - epsilon: {:.1}",
+                        "current step: {step} - mean eval reward: {reward_avg:.1} - exploration epsilon: {:.2}",
                         agent.get_epsilon()
                     );
                 }
                 evaluation_reward.push(reward_avg);
                 evaluation_length.push(eval_lengths_avg);
                 if let Some(s) = &self.early_stop {
-                    if (s)(reward_avg) {
+                    if (s)(reward_avg) || step == n_steps {
                         training_reward.push(epi_reward);
                         training_length.push(action_counter);
                         break;
@@ -98,6 +98,7 @@ impl Trainer {
                 }
             }
         }
+
         Ok((
             training_reward,
             training_length,
@@ -137,25 +138,4 @@ impl Trainer {
         }
         Ok((reward_history, episode_length))
     }
-}
-
-pub fn print_python_like(tensor: &Tensor) {
-    let shape = tensor.size();
-    let mut s = String::from("tensor([");
-    for i in 0..shape[0] - 1 {
-        let v = tensor.double_value(&[i as i64]);
-        if v > 0.0 {
-            s.push_str(&format!(" {:.4}, ", v));
-        } else {
-            s.push_str(&format!("{:.4}, ", v));
-        }
-    }
-    let v = tensor.double_value(&[shape[0] - 1 as i64]);
-    if v > 0.0 {
-        s.push_str(&format!(" {:.4}", v));
-    } else {
-        s.push_str(&format!("{:.4}", v));
-    }
-    s.push_str("])");
-    println!("{}", s);
 }

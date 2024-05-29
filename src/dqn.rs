@@ -1,11 +1,10 @@
 use crate::{
-    epsilon_greedy::EpsilonGreedy, experience_buffer::RandomExperienceBuffer,
-    trainer::print_python_like, PolicyGenerator,
+    epsilon_greedy::EpsilonGreedy, experience_buffer::RandomExperienceBuffer, PolicyGenerator,
 };
 use std::fs;
 use tch::{
     nn::{Adam, AdamW, Module, Optimizer, OptimizerConfig, RmsProp, Sgd, VarStore},
-    COptimizer, Device, IndexOp, Kind, TchError, Tensor,
+    COptimizer, Device, Kind, TchError, Tensor,
 };
 
 pub fn mae(values: &Tensor, expected_values: &Tensor) -> Tensor {

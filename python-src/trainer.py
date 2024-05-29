@@ -73,11 +73,11 @@ class Trainer:
                 eval_lengths_avg = np.mean(eval_lengths)
                 if verbose > 0:
                     print(
-                        f"steps number: {step} - eval reward: {reward_avg} - epsilon: {agent.get_epsilon()}"
+                        f"current step: {step} - mean eval reward: {reward_avg} - exploration epsilon: {agent.get_epsilon():.2f}"
                     )
                 evaluation_reward.append(reward_avg)
                 evaluation_length.append(eval_lengths_avg)
-                if self.early_stop and self.early_stop(reward_avg):
+                if (self.early_stop and self.early_stop(reward_avg)) or step == n_steps:
                     training_reward.append(epi_reward)
                     training_length.append(action_counter)
                     break

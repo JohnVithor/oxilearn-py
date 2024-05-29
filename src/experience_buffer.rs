@@ -129,7 +129,7 @@ impl RandomExperienceBuffer {
 
     pub fn sample_batch(&mut self, size: usize) -> (Tensor, Tensor, Tensor, Tensor, Tensor) {
         let dist: rand::distributions::Uniform<i64> =
-            rand::distributions::Uniform::new(0i64, self.size as i64);
+            rand::distributions::Uniform::new(0i64, self.size);
         let index: Vec<i64> = dist.sample_iter(&mut self.rng).take(size).collect();
         // println!("{index:?}");
         (
