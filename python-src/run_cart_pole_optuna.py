@@ -103,6 +103,7 @@ def create_objective(seed, verbose):
                 rewards = evaluation_results[0]
                 reward_avg = sum(rewards) / len(rewards)
                 return training_steps, reward_avg
+        evaluation_results = trainer.evaluate(model, 10)
         rewards = evaluation_results[0]
         reward_avg = sum(rewards) / len(rewards)
         return training_steps, reward_avg
