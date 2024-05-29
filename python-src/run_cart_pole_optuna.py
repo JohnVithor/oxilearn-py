@@ -85,7 +85,7 @@ def create_objective(seed, verbose):
         trainer.early_stop = lambda reward: reward >= 475.0
 
         training_steps = 0
-        for i, steps in enumerate(range(10_000, 50_000, 5_000)):
+        for i, steps in enumerate(range(10_000, 50_001, 5_000)):
             training_results = trainer.train_by_steps(
                 model,
                 steps,

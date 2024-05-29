@@ -101,12 +101,14 @@ class DoubleDeepAgent:
 
     def get_action(self, state):
         with torch.no_grad():
-            values = self.policy_net(state.to(self.device))
+            state = self.memory.normalize(state.float().to(self.device)).float()
+            values = self.policy_net(state)
         return self.action_selection.get_action(values)
 
     def get_best_action(self, state):
         with torch.no_grad():
-            values = self.policy_net(state.to(self.device))
+            state = self.memory.normalize(state.float().to(self.device)).float()
+            values = self.policy_net(state)
         return values.argmax(dim=0).item()
 
     def add_transition(self, curr_state, curr_action, reward, done, next_state):

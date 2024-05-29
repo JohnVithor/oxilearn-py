@@ -23,13 +23,13 @@ fn main() {
 
     let update_strategy =
         oxilearn::epsilon_greedy::EpsilonUpdateStrategy::EpsilonLinearTrainingDecreasing {
-            start: 0.5,
+            start: 1.0,
             end: 0.05,
             end_fraction: 0.2,
         };
     let action_selector = EpsilonGreedy::new(1.0, seed + 2, update_strategy);
 
-    let mem_replay = RandomExperienceBuffer::new(10_000, 4, 1000, seed + 3, true, device);
+    let mem_replay = RandomExperienceBuffer::new(15_000, 4, 5000, seed + 3, true, device);
     let policy = generate_policy(
         vec![(256, |x: &Tensor| x.relu()), (256, |x: &Tensor| x.relu())],
         |xs: &Tensor| xs.shallow_clone(),
@@ -47,9 +47,9 @@ fn main() {
         policy,
         opt,
         loss_fn,
-        0.01,
+        0.07,
         0.99,
-        10.0,
+        1.0,
         device,
     );
     model.save_net("./safetensors/cart_pole").expect("ok");
@@ -58,7 +58,7 @@ fn main() {
     trainer.early_stop = Some(Box::new(move |reward| reward >= 475.0));
 
     let training_results: Result<TrainResults, OxiLearnErr> =
-        trainer.train_by_steps(&mut model, 50_000, 1, 2, 256, 2, 1000, 10, verbose);
+        trainer.train_by_steps(&mut model, 50_000, 100, 200, 128, 75, 1000, 10, verbose);
 
     let training_steps = training_results.unwrap().1.iter().sum::<u32>();
 
