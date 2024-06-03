@@ -101,13 +101,13 @@ class DoubleDeepAgent:
 
     def get_action(self, state):
         with torch.no_grad():
-            state = self.memory.normalize(state.float().to(self.device)).float()
+            state = self.memory.normalize_state(state.float().to(self.device)).float()
             values = self.policy_net(state)
         return self.action_selection.get_action(values)
 
     def get_best_action(self, state):
         with torch.no_grad():
-            state = self.memory.normalize(state.float().to(self.device)).float()
+            state = self.memory.normalize_state(state.float().to(self.device)).float()
             values = self.policy_net(state)
         return values.argmax(dim=0).item()
 

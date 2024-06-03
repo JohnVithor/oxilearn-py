@@ -15,8 +15,8 @@ def main():
     verbose = int(args[2])
     torch.manual_seed(seed)
 
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = "cpu"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = "cpu"
 
     # train_env = gym.make("CartPole-v1")
     train_env = CartPoleEnv()
@@ -48,18 +48,18 @@ def main():
         policy,
         optimizer,
         loss_fn,
-        0.03,
+        0.0005,
         0.99,
-        1.0,
+        0.5,
         device,
     )
-    model.save_net("./safetensors-python/cart_pole")
+    # model.save_net("./safetensors-python/cart_pole")
 
     trainer = Trainer(train_env, eval_env)
     trainer.early_stop = lambda reward: reward >= 475.0
 
     training_results = trainer.train_by_steps(
-        model, 50_000, 128, 256, 128, 10, 1000, 10, verbose
+        model, 50_000, 150, 200, 128, 10, 1000, 10, verbose
     )
     training_steps = sum(training_results[1])
 
@@ -69,7 +69,7 @@ def main():
     variance = sum((reward_avg - value) ** 2 for value in rewards) / len(rewards)
     std = variance**0.5
 
-    model.save_net("./safetensors-python/cart_pole_after_training")
+    # model.save_net("./safetensors-python/cart_pole_after_training")
 
     print(f"python,{seed},{training_steps},{reward_avg},{std}")
 

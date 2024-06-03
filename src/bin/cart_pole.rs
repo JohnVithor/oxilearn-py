@@ -47,18 +47,18 @@ fn main() {
         policy,
         opt,
         loss_fn,
-        0.03,
+        0.0005,
         0.99,
-        1.0,
+        0.50,
         device,
     );
-    model.save_net("./safetensors/cart_pole").expect("ok");
+    // model.save_net("./safetensors/cart_pole").expect("ok");
 
     let mut trainer = Trainer::new(train_env, eval_env);
     trainer.early_stop = Some(Box::new(move |reward| reward >= 475.0));
 
     let training_results: Result<TrainResults, OxiLearnErr> =
-        trainer.train_by_steps(&mut model, 50_000, 128, 256, 128, 10, 1000, 10, verbose);
+        trainer.train_by_steps(&mut model, 50_000, 150, 200, 128, 10, 1000, 10, verbose);
 
     let training_steps = training_results.unwrap().1.iter().sum::<u32>();
 
@@ -74,9 +74,9 @@ fn main() {
         .sum::<f32>()
         / rewards.len() as f32;
     let std = variance.sqrt();
-    model
-        .save_net("./safetensors/cart_pole_after_training")
-        .expect("ok");
+    // model
+    //     .save_net("./safetensors/cart_pole_after_training")
+    //     .expect("ok");
 
     println!("rust,{seed},{training_steps},{reward_avg},{std}")
 }

@@ -7,6 +7,7 @@ pub mod cart_pole;
 pub mod dqn;
 pub mod epsilon_greedy;
 pub mod experience_buffer;
+pub mod ppo;
 pub mod trainer;
 
 #[derive(Debug, Clone)]

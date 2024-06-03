@@ -42,7 +42,8 @@ class RandomExperienceBuffer:
         self.minsize = minsize
         self.rng = SmallRng(seed)
         self.device = device
-        self.stats = ExperienceStats(obs_size, device)
+        self.state_stats = ExperienceStats(obs_size, device)
+        self.reward_stats = ExperienceStats(1, device)
         self.normalize_obs = normalize_obs
 
     def ready(self):
@@ -66,11 +67,22 @@ class RandomExperienceBuffer:
         self.size = min(self.capacity, self.size + 1)
 
         if self.normalize_obs:
-            self.stats.push(curr_state)
+            self.state_stats.push(curr_state)
+            self.reward_stats.push(reward)
 
-    def normalize(self, values):
+    def normalize_state(self, values):
         if self.normalize_obs:
-            return (values - self.stats.mean()) / torch.sqrt(self.stats.var())
+            return (values - self.state_stats.mean()) / torch.sqrt(
+                self.state_stats.var()
+            )
+        else:
+            return values
+
+    def normalize_reward(self, values):
+        if self.normalize_obs:
+            return (values - self.reward_stats.mean()) / torch.sqrt(
+                self.reward_stats.var()
+            )
         else:
             return values
 
@@ -79,9 +91,9 @@ class RandomExperienceBuffer:
         # print(indices)
         indices = tensor(indices, dtype=torch.int64, device=self.device)
         return (
-            self.normalize(self.curr_states[indices]).float(),
+            self.normalize_state(self.curr_states[indices]).float(),
             self.curr_actions[indices].reshape(-1, 1),
-            self.rewards[indices].reshape(-1, 1),
+            self.normalize_reward(self.rewards[indices].reshape(-1, 1)).float(),
             self.dones[indices].reshape(-1, 1),
-            self.normalize(self.next_states[indices]).float(),
+            self.normalize_state(self.next_states[indices]).float(),
         )
