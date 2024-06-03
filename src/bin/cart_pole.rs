@@ -16,7 +16,7 @@ fn main() {
     tch::manual_seed(seed as i64);
     // tch::maybe_init_cuda();
 
-    let device = Device::Cpu;
+    let device = Device::cuda_if_available();
 
     let train_env = CartPole::new(500, seed);
     let eval_env = CartPole::new(500, seed + 1);
@@ -29,7 +29,7 @@ fn main() {
         };
     let action_selector = EpsilonGreedy::new(1.0, seed + 2, update_strategy);
 
-    let mem_replay = RandomExperienceBuffer::new(15_000, 4, 5000, seed + 3, true, device);
+    let mem_replay = RandomExperienceBuffer::new(10_000, 4, 1000, seed + 3, false, device);
     let policy = generate_policy(
         vec![(256, |x: &Tensor| x.relu()), (256, |x: &Tensor| x.relu())],
         |xs: &Tensor| xs.shallow_clone(),
@@ -47,7 +47,7 @@ fn main() {
         policy,
         opt,
         loss_fn,
-        0.07,
+        0.03,
         0.99,
         1.0,
         device,
@@ -58,7 +58,7 @@ fn main() {
     trainer.early_stop = Some(Box::new(move |reward| reward >= 475.0));
 
     let training_results: Result<TrainResults, OxiLearnErr> =
-        trainer.train_by_steps(&mut model, 50_000, 100, 200, 128, 75, 1000, 10, verbose);
+        trainer.train_by_steps(&mut model, 50_000, 128, 256, 128, 10, 1000, 10, verbose);
 
     let training_steps = training_results.unwrap().1.iter().sum::<u32>();
 
