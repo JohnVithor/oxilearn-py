@@ -26,11 +26,11 @@ def main():
     eval_env.reset(seed=seed + 1)
 
     update_strategy = EpsilonUpdateStrategy.EpsilonLinearTrainingDecreasing(
-        start=1.0, end=0.05, end_fraction=0.1
+        start=1.0, end=0.05, end_fraction=0.2
     )
     action_selector = EpsilonGreedy(1.0, seed + 2, update_strategy)
 
-    mem_replay = RandomExperienceBuffer(15_000, 4, 1_000, seed + 3, True, device)
+    mem_replay = RandomExperienceBuffer(10_000, 4, 1_000, seed + 3, False, device)
 
     policy = generate_policy(
         [(256, nn.ReLU()), (256, nn.ReLU())],
@@ -48,7 +48,7 @@ def main():
         policy,
         optimizer,
         loss_fn,
-        0.04,
+        0.03,
         0.99,
         1.0,
         device,
@@ -59,7 +59,7 @@ def main():
     trainer.early_stop = lambda reward: reward >= 475.0
 
     training_results = trainer.train_by_steps(
-        model, 50_000, 100, 200, 128, 75, 1000, 10, verbose
+        model, 50_000, 128, 256, 128, 10, 1000, 10, verbose
     )
     training_steps = sum(training_results[1])
 
