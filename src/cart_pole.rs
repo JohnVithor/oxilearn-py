@@ -1,22 +1,14 @@
 use ndarray::{Array1, ArrayD};
+use numpy::{PyArray, PyArrayDyn};
+use pyo3::exceptions::PyValueError;
+use pyo3::types::{PyAnyMethods, PyDict, PyModule};
+use pyo3::{pyclass, pymethods, Bound, Py, PyAny, PyResult, Python};
 use rand::distributions::Uniform;
 use rand::prelude::Distribution;
 use rand::rngs::SmallRng;
 use rand::SeedableRng;
-#[derive(Debug, Clone)]
-pub enum SpaceInfo {
-    Discrete(usize),
-    Continuous(Vec<(f32, f32)>),
-}
 
-impl SpaceInfo {
-    pub fn is_discrete(&self) -> bool {
-        match self {
-            SpaceInfo::Discrete(_) => true,
-            SpaceInfo::Continuous(_) => false,
-        }
-    }
-}
+use crate::env::SpaceInfo;
 
 #[derive(Debug, Clone)]
 pub struct CartPole {
@@ -112,4 +104,106 @@ impl CartPole {
             || self.state[2] > Self::THETA_THRESHOLD_RADIANS;
         Ok((self.state.clone().into_dyn(), 1.0, terminated, false))
     }
+}
+
+#[pyclass]
+pub struct CartPoleWrapper {
+    pub env: CartPole,
+    pub observation_space: Py<PyAny>,
+    pub action_space: Py<PyAny>,
+}
+
+#[pymethods]
+impl CartPoleWrapper {
+    #[new]
+    #[pyo3(signature = (
+        max_steps=500,
+        seed=0,
+    ))]
+    pub fn new(max_steps: i32, seed: u64, py: Python) -> Self {
+        let fun1 = PyModule::from_code_bound(
+            py,
+            "from gymnasium import spaces
+def obs_space():
+    return spaces.Discrete(2)
+",
+            "",
+            "",
+        )
+        .unwrap()
+        .getattr("obs_space")
+        .unwrap();
+        let fun2 = PyModule::from_code_bound(
+            py,
+            "from gymnasium import spaces
+import numpy as np
+
+def act_space():
+    high = np.array(
+        [
+            4.8,
+            np.finfo(np.float32).max,
+            0.41887902047863906,
+            np.finfo(np.float32).max,
+        ],
+        dtype=np.float32,
+    )
+    return spaces.Box(-high, high, dtype=np.float32)
+",
+            "",
+            "",
+        )
+        .unwrap()
+        .getattr("act_space")
+        .unwrap();
+        Self {
+            env: CartPole::new(max_steps, seed),
+            action_space: fun1.call0().unwrap().unbind(),
+            observation_space: fun2.call0().unwrap().unbind(),
+        }
+    }
+    #[getter]
+    pub fn action_space(&self) -> &Py<PyAny> {
+        &self.action_space
+    }
+
+    #[getter]
+    pub fn observation_space(&self) -> &Py<PyAny> {
+        &self.observation_space
+    }
+
+    #[pyo3(signature = (seed=None))]
+    pub fn reset<'a>(
+        &mut self,
+        seed: Option<u64>,
+        py: Python<'a>,
+    ) -> PyResult<(Bound<'a, PyArrayDyn<f32>>, Py<PyDict>)> {
+        let state = self.env.reset(seed);
+        Ok((
+            PyArray::from_array_bound(py, &state),
+            PyDict::new_bound(py).unbind(),
+        ))
+    }
+
+    #[pyo3(signature = (action))]
+    pub fn step(
+        &mut self,
+        action: usize,
+        py: Python,
+    ) -> PyResult<(Py<PyArrayDyn<f32>>, f32, bool, bool, Py<PyDict>)> {
+        let result = self.env.step(action);
+        if let Ok((state, reward, terminated, done)) = result {
+            return Ok((
+                PyArray::from_array_bound(py, &state).unbind(),
+                reward,
+                terminated,
+                done,
+                PyDict::new_bound(py).unbind(),
+            ));
+        } else {
+            Err(PyValueError::new_err("error"))
+        }
+    }
+    pub fn close(&self) {}
+    pub fn render(&self) {}
 }

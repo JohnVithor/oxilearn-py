@@ -94,12 +94,18 @@ impl DoubleDeepAgent {
     }
 
     pub fn get_action(&mut self, state: &Tensor) -> usize {
-        let values = tch::no_grad(|| self.policy.forward(&state.to_device(self.device)));
+        let values = tch::no_grad(|| {
+            self.policy
+                .forward(&state.to_kind(Kind::Double).to_device(self.device))
+        });
         self.action_selection.get_action(&values) as usize
     }
 
     pub fn get_best_action(&self, state: &Tensor) -> usize {
-        let values = tch::no_grad(|| self.policy.forward(&state.to_device(self.device)));
+        let values = tch::no_grad(|| {
+            self.policy
+                .forward(&state.to_kind(Kind::Double).to_device(self.device))
+        });
         let a: i32 = values.argmax(0, true).try_into().unwrap();
         a as usize
     }
@@ -112,8 +118,13 @@ impl DoubleDeepAgent {
         done: bool,
         next_state: &Tensor,
     ) {
-        self.memory
-            .add(curr_state, curr_action, reward, done, next_state);
+        self.memory.add(
+            &curr_state.to_kind(Kind::Double),
+            curr_action,
+            reward,
+            done,
+            &next_state.to_kind(Kind::Double),
+        );
     }
 
     pub fn update_networks(&mut self) -> Result<(), TchError> {
@@ -126,9 +137,9 @@ impl DoubleDeepAgent {
 
     pub fn batch_qvalues(&self, b_states: &Tensor, b_actions: &Tensor) -> Tensor {
         self.policy
-            .forward(&b_states.to_kind(Kind::Float))
+            .forward(&b_states.to_kind(Kind::Double))
             .gather(1, &b_actions.to_kind(Kind::Int64), false)
-            .to_kind(Kind::Float)
+            .to_kind(Kind::Double)
     }
 
     pub fn batch_expected_values(
@@ -139,15 +150,15 @@ impl DoubleDeepAgent {
     ) -> Tensor {
         let best_target_qvalues = tch::no_grad(|| {
             self.target_policy
-                .forward(&b_state_.to_kind(Kind::Float))
+                .forward(&b_state_.to_kind(Kind::Double))
                 .max_dim(1, true)
                 .0
         });
-        (b_reward.to_kind(Kind::Float)
+        (b_reward.to_kind(Kind::Double)
             + self.discount_factor
-                * (&Tensor::from(1.0).to_device(self.device) - b_done.to_kind(Kind::Float))
+                * (&Tensor::from(1.0).to_device(self.device) - b_done.to_kind(Kind::Double))
                 * (&best_target_qvalues))
-            .to_kind(Kind::Float)
+            .to_kind(Kind::Double)
     }
 
     pub fn optimize(&mut self, loss: Tensor) {
@@ -165,9 +176,9 @@ impl DoubleDeepAgent {
                 // print_python_like(&b_state.i(0));
                 let policy_qvalues = self.batch_qvalues(&b_state, &b_action);
                 let expected_values = self.batch_expected_values(&b_state_, &b_reward, &b_done);
-                let loss = (self.loss_fn)(&policy_qvalues, &expected_values);
+                let loss = (self.loss_fn)(&policy_qvalues, &expected_values).to_kind(Kind::Double);
                 self.optimize(loss);
-                values.push(expected_values.mean(Kind::Float).try_into().unwrap())
+                values.push(expected_values.mean(Kind::Double).try_into().unwrap())
             }
             Some((values.iter().sum::<f32>()) / (values.len() as f32))
         } else {

@@ -11,8 +11,8 @@ pub struct ExperienceStats {
 impl ExperienceStats {
     pub fn new(shape: impl IntList + Copy, device: Device) -> Self {
         Self {
-            means: Tensor::zeros(shape, (Kind::Float, device)),
-            msqs: Tensor::ones(shape, (Kind::Float, device)),
+            means: Tensor::zeros(shape, (Kind::Double, device)),
+            msqs: Tensor::ones(shape, (Kind::Double, device)),
             count: Tensor::zeros(1, (Kind::Int64, device)),
         }
     }
@@ -62,10 +62,10 @@ impl RandomExperienceBuffer {
     ) -> Self {
         Self {
             obs_size,
-            curr_states: Tensor::empty([capacity, obs_size], (Kind::Float, device)),
+            curr_states: Tensor::empty([capacity, obs_size], (Kind::Double, device)),
             curr_actions: Tensor::empty(capacity, (Kind::Int64, device)),
-            rewards: Tensor::empty(capacity, (Kind::Float, device)),
-            next_states: Tensor::empty([capacity, obs_size], (Kind::Float, device)),
+            rewards: Tensor::empty(capacity, (Kind::Double, device)),
+            next_states: Tensor::empty([capacity, obs_size], (Kind::Double, device)),
             dones: Tensor::empty(capacity, (Kind::Int8, device)),
             capacity,
             next_idx: 0,
@@ -94,11 +94,13 @@ impl RandomExperienceBuffer {
         let index = Vec::from_iter(index..(index + self.obs_size));
         let index = &Tensor::from_slice(&index).to_device(self.device);
 
-        let curr_state = &curr_state.to_device(self.device);
+        let curr_state = &curr_state.to_device(self.device).to_kind(Kind::Double);
         let curr_action = &Tensor::from(curr_action as i64).to_device(self.device);
-        let reward = &Tensor::from(reward).to_device(self.device);
+        let reward = &Tensor::from(reward)
+            .to_device(self.device)
+            .to_kind(Kind::Double);
         let done = &Tensor::from(done as i8).to_device(self.device);
-        let next_state = &next_state.to_device(self.device);
+        let next_state = &next_state.to_device(self.device).to_kind(Kind::Double);
 
         self.curr_states = self.curr_states.put(index, curr_state, false);
         self.next_states = self.next_states.put(index, next_state, false);
@@ -134,12 +136,12 @@ impl RandomExperienceBuffer {
         // println!("{index:?}");
         (
             self.normalize(self.curr_states.i(index.clone()))
-                .to_kind(Kind::Float),
+                .to_kind(Kind::Double),
             self.curr_actions.i(index.clone()).reshape([-1, 1]),
             self.rewards.i(index.clone()).reshape([-1, 1]),
             self.dones.i(index.clone()).reshape([-1, 1]),
             self.normalize(self.next_states.i(index))
-                .to_kind(Kind::Float),
+                .to_kind(Kind::Double),
         )
     }
 }

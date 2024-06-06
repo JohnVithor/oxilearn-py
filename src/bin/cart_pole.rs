@@ -1,6 +1,7 @@
 use oxilearn::{
     cart_pole::CartPole,
     dqn::DoubleDeepAgent,
+    env::PyEnv,
     epsilon_greedy::EpsilonGreedy,
     experience_buffer::RandomExperienceBuffer,
     generate_policy,
@@ -18,8 +19,8 @@ fn main() {
 
     let device = Device::cuda_if_available();
 
-    let train_env = CartPole::new(500, seed);
-    let eval_env = CartPole::new(500, seed + 1);
+    let train_env = PyEnv::native(CartPole::new(500, seed)).unwrap();
+    let eval_env = PyEnv::native(CartPole::new(500, seed + 1)).unwrap();
 
     let update_strategy =
         oxilearn::epsilon_greedy::EpsilonUpdateStrategy::EpsilonLinearTrainingDecreasing {
@@ -47,18 +48,18 @@ fn main() {
         policy,
         opt,
         loss_fn,
-        0.0005,
+        0.003,
         0.99,
-        0.50,
+        1.0,
         device,
     );
     // model.save_net("./safetensors/cart_pole").expect("ok");
 
-    let mut trainer = Trainer::new(train_env, eval_env);
+    let mut trainer = Trainer::new(train_env, eval_env).unwrap();
     trainer.early_stop = Some(Box::new(move |reward| reward >= 475.0));
 
     let training_results: Result<TrainResults, OxiLearnErr> =
-        trainer.train_by_steps(&mut model, 50_000, 150, 200, 128, 10, 1000, 10, verbose);
+        trainer.train_by_steps(&mut model, 50_000, 175, 200, 128, 10, 1000, 10, verbose);
 
     let training_steps = training_results.unwrap().1.iter().sum::<u32>();
 

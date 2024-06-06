@@ -14,19 +14,19 @@ def main(seed, save, verbose):
 
     model = DQN(
         net_arch=[(256, "relu"), (256, "relu")],
-        learning_rate=0.0023,
+        learning_rate=0.03,
         last_activation="none",
-        memory_size=100_000,
+        memory_size=10_000,
         min_memory_size=1_000,
         discount_factor=0.99,
         initial_epsilon=1.0,
-        final_epsilon=0.03,
-        exploration_fraction=0.16,
-        max_grad_norm=10.0,
+        final_epsilon=0.05,
+        exploration_fraction=0.2,
+        max_grad_norm=1.0,
         seed=seed,
-        normalize_obs=True,
+        normalize_obs=False,
         optimizer="Adam",
-        loss_fn="SmoothL1Loss",
+        loss_fn="MSE",
     )
 
     env.reset(seed=seed + 1)
@@ -37,10 +37,10 @@ def main(seed, save, verbose):
         eval_env,
         env.spec.reward_threshold,
         steps=50_000,
-        gradient_steps=128,
-        train_freq=256,
+        gradient_steps=175,
+        train_freq=200,
         update_freq=10,
-        batch_size=256,
+        batch_size=128,
         eval_for=10,
         verbose=verbose,
     )
