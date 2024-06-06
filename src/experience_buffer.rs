@@ -1,7 +1,7 @@
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::distributions::Distribution;
+use rand::{rngs::SmallRng, SeedableRng};
 use tch::{Device, IndexOp, Kind, Scalar, Tensor};
 use torch_sys::IntList;
-
 pub struct ExperienceStats {
     means: Tensor,
     msqs: Tensor,
@@ -128,15 +128,18 @@ impl RandomExperienceBuffer {
     }
 
     pub fn sample_batch(&mut self, size: usize) -> (Tensor, Tensor, Tensor, Tensor, Tensor) {
-        let index: Vec<i64> = (0..size)
-            .map(|_| self.rng.gen_range(0..self.size))
-            .collect();
+        let dist: rand::distributions::Uniform<i64> =
+            rand::distributions::Uniform::new(0i64, self.size);
+        let index: Vec<i64> = dist.sample_iter(&mut self.rng).take(size).collect();
+        // println!("{index:?}");
         (
-            self.normalize(self.curr_states.i(index.clone())),
+            self.normalize(self.curr_states.i(index.clone()))
+                .to_kind(Kind::Float),
             self.curr_actions.i(index.clone()).reshape([-1, 1]),
             self.rewards.i(index.clone()).reshape([-1, 1]),
             self.dones.i(index.clone()).reshape([-1, 1]),
-            self.normalize(self.next_states.i(index)),
+            self.normalize(self.next_states.i(index))
+                .to_kind(Kind::Float),
         )
     }
 }

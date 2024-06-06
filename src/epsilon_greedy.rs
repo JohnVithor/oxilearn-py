@@ -1,6 +1,5 @@
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use tch::Tensor;
-
 pub enum EpsilonUpdateStrategy {
     AdaptativeEpsilon {
         min_epsilon: f32,
@@ -101,11 +100,14 @@ impl EpsilonGreedy {
     }
 
     pub fn should_explore(&mut self) -> bool {
-        self.current_epsilon != 0.0 && self.rng.gen_range(0.0..1.0) <= self.current_epsilon
+        let rng = self.rng.gen_range(0.0..1.0);
+        self.current_epsilon != 0.0 && rng <= self.current_epsilon
     }
 
     pub fn get_action(&mut self, values: &Tensor) -> usize {
+        // print_python_like(values);
         if self.should_explore() {
+            // println!("{:?}", values.size()[0]);
             self.rng.gen_range(0..values.size()[0] as usize)
         } else {
             let a: i32 = values.argmax(0, true).try_into().unwrap();
@@ -122,8 +124,10 @@ impl EpsilonGreedy {
     }
 
     pub fn update(&mut self, current_training_progress: f32, epi_reward: f32) {
-        self.current_epsilon =
-            self.update_strategy
-                .update(self.current_epsilon, current_training_progress, epi_reward)
+        self.current_epsilon = self.update_strategy.update(
+            self.current_epsilon,
+            current_training_progress,
+            epi_reward,
+        );
     }
 }

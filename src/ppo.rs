@@ -48,7 +48,7 @@ impl OptimizerConfig for OptimizerEnum {
     }
 }
 
-pub struct DoubleDeepAgent {
+pub struct ProximalPolicyOptimization {
     pub action_selection: EpsilonGreedy,
     pub policy: Box<dyn Module>,
     pub target_policy: Box<dyn Module>,
@@ -62,7 +62,7 @@ pub struct DoubleDeepAgent {
     pub device: Device,
 }
 
-impl DoubleDeepAgent {
+impl ProximalPolicyOptimization {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         action_selector: EpsilonGreedy,

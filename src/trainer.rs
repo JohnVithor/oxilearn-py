@@ -1,30 +1,22 @@
 use tch::Tensor;
 
-use crate::{dqn::DoubleDeepAgent, env::PyEnv, OxiLearnErr};
+use crate::{cart_pole::CartPole, dqn::DoubleDeepAgent, OxiLearnErr};
 
 pub type TrainResults = (Vec<f32>, Vec<u32>, Vec<f32>, Vec<f32>, Vec<f32>);
 
 pub struct Trainer {
-    env: PyEnv,
-    eval_env: PyEnv,
+    env: CartPole,
+    eval_env: CartPole,
     pub early_stop: Option<Box<dyn Fn(f32) -> bool>>,
 }
 
 impl Trainer {
-    pub fn new(env: PyEnv, eval_env: PyEnv) -> Result<Self, OxiLearnErr> {
-        if env.observation_space()?.is_discrete() {
-            // should be continuous
-            return Err(OxiLearnErr::EnvNotSupported);
-        }
-        if !env.action_space()?.is_discrete() {
-            // should be discrete
-            return Err(OxiLearnErr::EnvNotSupported);
-        }
-        Ok(Self {
+    pub fn new(env: CartPole, eval_env: CartPole) -> Self {
+        Self {
             env,
             eval_env,
             early_stop: None,
-        })
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -40,7 +32,7 @@ impl Trainer {
         eval_for: u32,
         verbose: usize,
     ) -> Result<TrainResults, OxiLearnErr> {
-        let mut curr_obs: Tensor = self.env.reset()?;
+        let mut curr_obs: Tensor = Tensor::try_from(self.env.reset(None)).unwrap();
         let mut training_reward: Vec<f32> = vec![];
         let mut training_length: Vec<u32> = vec![];
         let mut training_error: Vec<f32> = vec![];
@@ -55,7 +47,10 @@ impl Trainer {
         for step in 1..=n_steps {
             action_counter += 1;
             let curr_action = agent.get_action(&curr_obs);
-            let (next_obs, reward, done, truncated) = self.env.step(curr_action)?;
+            // println!("{curr_action}");
+            let (next_obs, reward, done, truncated) = self.env.step(curr_action).unwrap();
+            let next_obs: Tensor = Tensor::try_from(next_obs).unwrap();
+
             epi_reward += reward;
             agent.add_transition(&curr_obs, curr_action, reward, done, &next_obs);
 
@@ -73,7 +68,8 @@ impl Trainer {
                 if n_episodes % update_freq == 0 && agent.update_networks().is_err() {
                     println!("copy error")
                 }
-                curr_obs = self.env.reset()?;
+                curr_obs = Tensor::try_from(self.env.reset(None)).unwrap();
+
                 agent.action_selection_update(step as f32 / n_steps as f32, epi_reward);
                 n_episodes += 1;
                 epi_reward = 0.0;
@@ -87,14 +83,14 @@ impl Trainer {
                     / (eval_lengths.len() as f32);
                 if verbose > 0 {
                     println!(
-                        "steps number: {step} - eval reward: {reward_avg} - epsilon: {}",
+                        "current step: {step} - mean eval reward: {reward_avg:.1} - exploration epsilon: {:.2}",
                         agent.get_epsilon()
                     );
                 }
                 evaluation_reward.push(reward_avg);
                 evaluation_length.push(eval_lengths_avg);
                 if let Some(s) = &self.early_stop {
-                    if (s)(reward_avg) {
+                    if (s)(reward_avg) || step == n_steps {
                         training_reward.push(epi_reward);
                         training_length.push(action_counter);
                         break;
@@ -102,6 +98,7 @@ impl Trainer {
                 }
             }
         }
+
         Ok((
             training_reward,
             training_length,
@@ -119,24 +116,25 @@ impl Trainer {
         let mut reward_history: Vec<f32> = vec![];
         let mut episode_length: Vec<u32> = vec![];
         for _episode in 0..n_episodes {
-            let mut action_counter: u32 = 0;
             let mut epi_reward: f32 = 0.0;
-            let obs_repr = self.eval_env.reset()?;
+            let obs_repr = self.eval_env.reset(None);
+            let obs_repr = Tensor::try_from(obs_repr).unwrap();
             let mut curr_action = agent.get_best_action(&obs_repr);
+            let mut action_counter: u32 = 0;
             loop {
-                action_counter += 1;
-                let (obs, reward, done, truncated) = self.eval_env.step(curr_action)?;
-                let next_obs_repr = obs;
+                let (obs, reward, done, truncated) = self.eval_env.step(curr_action).unwrap();
+                let next_obs_repr = Tensor::try_from(obs).unwrap();
                 let next_action_repr: usize = agent.get_best_action(&next_obs_repr);
                 let next_action = next_action_repr;
                 curr_action = next_action;
                 epi_reward += reward;
                 if done || truncated {
                     reward_history.push(epi_reward);
+                    episode_length.push(action_counter);
                     break;
                 }
+                action_counter += 1;
             }
-            episode_length.push(action_counter);
         }
         Ok((reward_history, episode_length))
     }
