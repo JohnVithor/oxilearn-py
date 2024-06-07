@@ -40,7 +40,7 @@ def main():
     )
 
     optimizer = torch.optim.Adam
-    loss_fn = nn.SmoothL1Loss()
+    loss_fn = nn.HuberLoss()
 
     model = DoubleDeepAgent(
         action_selector,
@@ -48,9 +48,9 @@ def main():
         policy,
         optimizer,
         loss_fn,
-        0.0005,
+        0.003,
         0.99,
-        0.5,
+        1.0,
         device,
     )
     # model.save_net("./safetensors-python/cart_pole")
@@ -59,7 +59,7 @@ def main():
     trainer.early_stop = lambda reward: reward >= 475.0
 
     training_results = trainer.train_by_steps(
-        model, 50_000, 150, 200, 128, 10, 1000, 10, verbose
+        model, 50_000, 175, 200, 128, 10, 1000, 10, verbose
     )
     training_steps = sum(training_results[1])
 
