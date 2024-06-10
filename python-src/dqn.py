@@ -88,7 +88,9 @@ class DoubleDeepAgent:
         device,
     ):
         self.policy_net = generate_policy(device)
+        self.policy_net.double()
         self.target_net = generate_policy(device)
+        self.target_net.double()
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.optimizer = opt(self.policy_net.parameters(), learning_rate)
@@ -101,13 +103,13 @@ class DoubleDeepAgent:
 
     def get_action(self, state):
         with torch.no_grad():
-            state = self.memory.normalize_state(state.float().to(self.device)).float()
+            state = self.memory.normalize_state(state.double().to(self.device)).double()
             values = self.policy_net(state)
         return self.action_selection.get_action(values)
 
     def get_best_action(self, state):
         with torch.no_grad():
-            state = self.memory.normalize_state(state.float().to(self.device)).float()
+            state = self.memory.normalize_state(state.double().to(self.device)).double()
             values = self.policy_net(state)
         return values.argmax(dim=0).item()
 
@@ -121,17 +123,17 @@ class DoubleDeepAgent:
         return self.memory.sample_batch(size)
 
     def batch_qvalues(self, b_states, b_actions):
-        return self.policy_net(b_states.float()).gather(1, b_actions.long()).float()
+        return self.policy_net(b_states.double()).gather(1, b_actions.long()).double()
 
     def batch_expected_values(self, b_state_, b_reward, b_done):
         with torch.no_grad():
-            best_target_qvalues = self.target_net(b_state_.float()).max(
+            best_target_qvalues = self.target_net(b_state_.double()).max(
                 dim=1, keepdim=True
             )[0]
         return (
-            b_reward.float()
-            + self.discount_factor * (1.0 - b_done.float()) * best_target_qvalues
-        ).float()
+            b_reward.double()
+            + self.discount_factor * (1.0 - b_done.double()) * best_target_qvalues
+        ).double()
 
     def optimize(self, loss):
         self.optimizer.zero_grad()
@@ -150,7 +152,7 @@ class DoubleDeepAgent:
             expected_values = self.batch_expected_values(b_state_, b_reward, b_done)
             loss = self.loss_fn(policy_qvalues, expected_values)
             self.optimize(loss)
-            values.append(expected_values.mean().float().item())
+            values.append(expected_values.mean().double().item())
         return sum(values) / len(values)
 
     def action_selection_update(self, current_training_progress, epi_reward):
