@@ -73,7 +73,6 @@ class OptimizerEnum:
             raise ValueError("Unknown optimizer type")
 
 
-# Classe do agente Double Deep Q-Learning
 class DoubleDeepAgent:
     def __init__(
         self,

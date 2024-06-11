@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from typing import Tuple, List
 from dqn import DoubleDeepAgent
+from ppo import PPOAgent
 
 TrainResults = Tuple[List[float], List[int], List[float], List[float], List[float]]
 
@@ -14,7 +15,7 @@ class Trainer:
 
     def train_by_steps(
         self,
-        agent: DoubleDeepAgent,
+        agent: DoubleDeepAgent | PPOAgent,
         n_steps: int,
         gradient_steps: int,
         train_freq: int,
@@ -39,13 +40,12 @@ class Trainer:
 
         for step in range(1, n_steps + 1):
             action_counter += 1
-            curr_action = agent.get_action(curr_obs)
-            # print(curr_action)
+            curr_action, probs = agent.get_action(curr_obs)
             next_obs, reward, done, truncated, _ = self.env.step(curr_action)
             next_obs = torch.tensor(next_obs, dtype=torch.float32)
 
             epi_reward += reward
-            agent.add_transition(curr_obs, curr_action, reward, done, next_obs)
+            agent.add_transition(curr_obs, curr_action, reward, done, next_obs, probs)
 
             curr_obs = next_obs
 
