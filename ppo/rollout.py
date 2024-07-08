@@ -15,6 +15,8 @@ class Rollout:
         self.dones = torch.zeros((num_steps, num_envs)).to(device)
         self.values = torch.zeros((num_steps, num_envs)).to(device)
 
+        self.episode_returns = []
+
         self.step = 0
 
     def add(self, obs, action, logprob, reward, done, value) -> None:
@@ -29,7 +31,7 @@ class Rollout:
 
     def reset(self) -> None:
         self.step = 0
+        self.episode_returns = []
 
-    def get_done_rewards(self):
-        dones = self.dones.sum(dim=0)
-        return self.rewards.sum(dim=0) * dones / dones.sum()
+    def add_episode_return(self, episode_return: float) -> None:
+        self.episode_returns.append(episode_return)

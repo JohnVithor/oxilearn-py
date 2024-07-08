@@ -37,3 +37,7 @@ class Policy(nn.Module):
         if action is None:
             action = probs.sample()
         return action, probs.log_prob(action), probs.entropy(), self.critic(x)
+
+    def get_best_action(self, x):
+        logits = self.actor(x)
+        return torch.argmax(logits, dim=-1)

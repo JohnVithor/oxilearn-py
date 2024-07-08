@@ -1,10 +1,27 @@
 import time
+import gymnasium
 import numpy as np
 import torch
 import torch.nn as nn
+from collections import namedtuple
 
 from model import Policy
 from rollout import Rollout
+
+
+OptimizationResults = namedtuple(
+    "OptimizationResults",
+    [
+        "learning_rate",
+        "value_loss",
+        "policy_loss",
+        "entropy",
+        "old_approx_kl",
+        "approx_kl",
+        "clipfrac",
+        "explained_variance",
+    ],
+)
 
 
 class PPO:
@@ -12,7 +29,8 @@ class PPO:
         self,
         policy: Policy,
         optimizer,
-        envs,
+        envs: gymnasium.Env,
+        eval_env: gymnasium.Env,
         num_steps=128,
         num_envs=1,
         gamma=0.99,
@@ -32,7 +50,12 @@ class PPO:
         self.policy = policy
         self.optimizer = optimizer
         self.envs = envs
-        self.num_steps = num_steps
+        self.eval_env = eval_env
+        self.num_steps = (
+            envs.spec.max_episode_steps
+            if envs.spec and envs.spec.max_episode_steps
+            else num_steps
+        )
         self.num_envs = num_envs
         self.rollout_buffer = Rollout(num_steps, num_envs, envs, device)
         self.gamma = gamma
@@ -90,12 +113,8 @@ class PPO:
 
             if "final_info" in infos:
                 for info in infos["final_info"]:
-                    if info and "episode" in info:
-                        print(
-                            f"global_step={global_step}, episodic_return={info['episode']['r']}"
-                        )
-            #             print("charts/episodic_return", info["episode"]["r"], global_step)
-            #             print("charts/episodic_length", info["episode"]["l"], global_step)
+                    if info and "episode" in info and "r" in info["episode"]:
+                        self.rollout_buffer.add_episode_return(info["episode"]["r"])
 
         return next_obs, next_done, global_step
 
@@ -158,7 +177,6 @@ class PPO:
                 ratio = logratio.exp()
 
                 with torch.no_grad():
-                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean()
                     approx_kl = ((ratio - 1) - logratio).mean()
                     clipfracs += [
@@ -210,19 +228,16 @@ class PPO:
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
-        return self.optimizer.param_groups[0]["lr"]
-
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
-        # print("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-        # print("losses/value_loss", v_loss.item(), global_step)
-        # print("losses/policy_loss", pg_loss.item(), global_step)
-        # print("losses/entropy", entropy_loss.item(), global_step)
-        # print("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        # print("losses/approx_kl", approx_kl.item(), global_step)
-        # print("losses/clipfrac", np.mean(clipfracs), global_step)
-        # print("losses/explained_variance", explained_var, global_step)
-        # print("SPS:", int(global_step / (time.time() - start_time)))
-        # print("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        return OptimizationResults(
+            self.optimizer.param_groups[0]["lr"],
+            v_loss.item(),
+            pg_loss.item(),
+            entropy_loss.item(),
+            old_approx_kl.item(),
+            approx_kl.item(),
+            np.mean(clipfracs),
+            explained_var,
+        )
 
     def learn(self, num_iterations, seed, anneal_lr=True):
         global_step = 0
@@ -231,8 +246,9 @@ class PPO:
         next_obs = torch.Tensor(next_obs).to(self.device)
         next_done = torch.zeros(self.num_envs).to(self.device)
 
+        results = []
+        checkpoint = 10_000
         while global_step < num_iterations:
-            # print(f"Iteration {iteration}/{num_iterations}")
             if anneal_lr:
                 self.anneal_learning_rate(global_step, num_iterations)
             next_obs, next_done, global_step = self.collect_rollout(
@@ -244,11 +260,34 @@ class PPO:
                 next_obs,
                 next_done,
             )
-            self.optimize(advantages, returns)
-            # if iteration % 10 == 0:
-            #     mean_rewards = self.rollout_buffer.get_done_rewards()
-            #     print(
-            #         f"Iteration {iteration}/{num_iterations} mean rewards: {mean_rewards}"
-            #     )
+            result = self.optimize(advantages, returns)
+            results.append(result)
+            if global_step >= checkpoint:
+                checkpoint += 10_000
+                mean_epi_return = np.nanmean(self.evaluate())
+                print(f"step {global_step}/{num_iterations} mean: {mean_epi_return}")
+                if mean_epi_return > self.eval_env.spec.reward_threshold:
+                    print("Threshold reached!")
+                    break
         end_time = time.time()
         print(f"Learning took {end_time - start_time} seconds")
+        return results
+
+    def evaluate(self, num_episodes=10):
+        rewards = []
+        for _ in range(num_episodes):
+            obs, _ = self.eval_env.reset()
+            done = False
+            obs = torch.Tensor(obs).to(self.device)
+            episode_reward = 0
+            while not done:
+                with torch.no_grad():
+                    action = self.policy.get_best_action(obs)
+                obs, reward, done, terminated, _ = self.eval_env.step(
+                    action.cpu().numpy()
+                )
+                done = done or terminated
+                obs = torch.Tensor(obs).to(self.device)
+                episode_reward += reward
+            rewards.append(episode_reward)
+        return rewards

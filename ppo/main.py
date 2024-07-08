@@ -5,11 +5,11 @@ import numpy as np
 import random
 
 from model import Policy
-from ppo import PPO
+from agent import PPO
 
 
 if __name__ == "__main__":
-    env_id = "CartPole-v1"
+    env_id = "Acrobot-v1"
     num_envs = 1
 
     seed = 42
@@ -27,6 +27,7 @@ if __name__ == "__main__":
             for _ in range(num_envs)
         ],
     )
+    eval_env = gym.make(env_id)
     assert isinstance(
         envs.single_action_space, gym.spaces.Discrete
     ), "only discrete action space is supported"
@@ -39,9 +40,15 @@ if __name__ == "__main__":
         policy,
         optimizer,
         envs,
+        eval_env,
+        num_steps=128,
         device=device,
     )
 
     trainer.learn(100_000, seed)
+    print(f"Training ended")
+
+    results = trainer.evaluate(10)
+    print(f"Results: {results}")
 
     envs.close()
