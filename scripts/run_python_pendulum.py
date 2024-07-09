@@ -36,7 +36,7 @@ def main(seed, save, verbose):
         seed=seed,
     )
 
-    reward_threshold = -400.0
+    reward_threshold = -100.0
     callback_on_best = StopTrainingOnRewardThreshold(
         reward_threshold=reward_threshold, verbose=verbose
     )

@@ -1,6 +1,8 @@
 use tch::Tensor;
 
-use crate::{dqn::DoubleDeepAgent, env::PyEnv, OxiLearnErr};
+use crate::{env::pyenv::PyEnv, OxiLearnErr};
+
+use super::agent::DQNAgent;
 
 pub type TrainResults = (Vec<f32>, Vec<u32>, Vec<f32>, Vec<f32>, Vec<f32>);
 
@@ -30,7 +32,7 @@ impl Trainer {
     #[allow(clippy::too_many_arguments)]
     pub fn train_by_steps(
         &mut self,
-        agent: &mut DoubleDeepAgent,
+        agent: &mut DQNAgent,
         n_steps: u32,
         gradient_steps: u32,
         train_freq: u32,
@@ -117,7 +119,7 @@ impl Trainer {
 
     pub fn evaluate(
         &mut self,
-        agent: &mut DoubleDeepAgent,
+        agent: &mut DQNAgent,
         n_episodes: u32,
     ) -> Result<(Vec<f32>, Vec<u32>), OxiLearnErr> {
         let mut reward_history: Vec<f32> = vec![];

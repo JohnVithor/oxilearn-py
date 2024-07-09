@@ -1,5 +1,6 @@
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use tch::Tensor;
+
 pub enum EpsilonUpdateStrategy {
     AdaptativeEpsilon {
         min_epsilon: f32,

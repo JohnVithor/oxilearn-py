@@ -32,7 +32,7 @@ class PPO:
         envs: gymnasium.Env,
         eval_env: gymnasium.Env,
         num_steps=128,
-        num_envs=1,
+        num_envs=4,
         gamma=0.99,
         gae_lambda=0.95,
         batch_size=32,
@@ -93,7 +93,6 @@ class PPO:
             actions_step = action
             logprobs_step = logprob
 
-            # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminations, truncations, infos = self.envs.step(
                 action.cpu().numpy()
             )

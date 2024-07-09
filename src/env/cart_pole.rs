@@ -8,7 +8,7 @@ use rand::prelude::Distribution;
 use rand::rngs::SmallRng;
 use rand::SeedableRng;
 
-use crate::env::SpaceInfo;
+use super::space_info::SpaceInfo;
 
 #[derive(Debug, Clone)]
 pub struct CartPole {

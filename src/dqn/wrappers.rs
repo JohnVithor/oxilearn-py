@@ -1,12 +1,4 @@
-use crate::{
-  dqn::{huber, mae, mse, rmse, smooth_l1, DoubleDeepAgent, OptimizerEnum},
-  env::{PyEnv, SpaceInfo},
-  epsilon_greedy::{EpsilonGreedy, EpsilonUpdateStrategy},
-  experience_buffer::RandomExperienceBuffer,
-  generate_policy,
-  trainer::{TrainResults, Trainer},
-  ActivationFunction, OxiLearnErr,
-};
+
 use pyo3::{
   exceptions::{PyFileNotFoundError, PyTypeError, PyValueError},
   pyclass, pymethods, Bound, PyAny, PyResult, Python,
@@ -16,6 +8,10 @@ use tch::{
   nn::{Adam, AdamW, RmsProp, Sgd},
   Device, Kind, Tensor,
 };
+
+use crate::{env::{pyenv::PyEnv, space_info::SpaceInfo}, OxiLearnErr};
+
+use super::{agent::DQNAgent, epsilon_greedy::{EpsilonGreedy, EpsilonUpdateStrategy}, experience_buffer::RandomExperienceBuffer, losses::{huber, mae, mse, rmse, smooth_l1}, optimizer_enum::OptimizerEnum, policy::{generate_policy, ActivationFunction}, trainer::{TrainResults, Trainer}};
 
 #[pyclass]
 pub struct DQN {
@@ -29,7 +25,7 @@ pub struct DQN {
   learning_rate: f64,
   discount_factor: f32,
   max_grad_norm: f64,
-  agent: Option<DoubleDeepAgent>,
+  agent: Option<DQNAgent>,
   rng: SmallRng,
   normalize_obs: bool,
   optimizer: OptimizerEnum,
@@ -212,7 +208,7 @@ impl DQN {
           .collect();
 
       let arch = generate_policy(info, self.last_activation, input, output).unwrap();
-      self.agent = Some(DoubleDeepAgent::new(
+      self.agent = Some(DQNAgent::new(
           action_selector,
           mem_replay,
           arch,

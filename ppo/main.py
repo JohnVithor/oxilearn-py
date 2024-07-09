@@ -9,10 +9,10 @@ from agent import PPO
 
 
 if __name__ == "__main__":
-    env_id = "Acrobot-v1"
-    num_envs = 1
+    env_id = "CartPole-v1"
+    num_envs = 4
 
-    seed = 42
+    seed = 0
     # TRY NOT TO MODIFY: seeding
     random.seed(seed)
     np.random.seed(seed)
@@ -41,7 +41,8 @@ if __name__ == "__main__":
         optimizer,
         envs,
         eval_env,
-        num_steps=128,
+        num_steps=100,
+        num_envs=num_envs,
         device=device,
     )
 
