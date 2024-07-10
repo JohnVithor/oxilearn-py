@@ -34,6 +34,7 @@ class PPO:
         num_steps=128,
         num_envs=4,
         gamma=0.99,
+        learning_rate=3e-4,
         gae_lambda=0.95,
         batch_size=32,
         minibatch_size=4,
@@ -63,7 +64,9 @@ class PPO:
         self.batch_size = batch_size
         self.minibatch_size = minibatch_size
         self.update_epochs = update_epochs
-        self.learning_rate = self.optimizer.param_groups[0]["lr"]
+        self.learning_rate = learning_rate
+        self.current_lr = learning_rate
+        # self.optimizer.param_groups[0]["lr"]
         self.clip_coef = clip_coef
         self.norm_adv = norm_adv
         self.clip_vloss = clip_vloss
@@ -86,7 +89,6 @@ class PPO:
             obs_step = next_obs
             dones_step = next_done
 
-            # ALGO LOGIC: action logic
             with torch.no_grad():
                 action, logprob, _, value = self.policy.get_action_and_value(next_obs)
                 values_step = value.flatten()
@@ -142,7 +144,8 @@ class PPO:
 
     def anneal_learning_rate(self, iteration, num_iterations):
         frac = 1.0 - (iteration - 1.0) / num_iterations
-        self.optimizer.param_groups[0]["lr"] = frac * self.learning_rate
+        self.current_lr = frac * self.learning_rate
+        self.optimizer.param_groups[0]["lr"] = self.current_lr
 
     def _flatten_data(self, advantages, returns):
         b_obs = self.rollout_buffer.obs.reshape(
@@ -228,7 +231,7 @@ class PPO:
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
         return OptimizationResults(
-            self.optimizer.param_groups[0]["lr"],
+            self.current_lr,
             v_loss.item(),
             pg_loss.item(),
             entropy_loss.item(),

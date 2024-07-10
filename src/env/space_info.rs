@@ -11,4 +11,11 @@ impl SpaceInfo {
             SpaceInfo::Continuous(_) => false,
         }
     }
+
+    pub fn shape(&self) -> i64 {
+        match self {
+            SpaceInfo::Discrete(n) => *n as i64,
+            SpaceInfo::Continuous(v) => v.len() as i64,
+        }
+    }
 }

@@ -18,8 +18,8 @@ def main(seed, save, verbose):
     eval_size = 10
     callback_freq = 1_000
 
-    vec_env = make_vec_env("Pendulum-v1", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv)
-    eval_env = make_vec_env("Pendulum-v1", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv)
+    vec_env = make_vec_env("CartPole-v1", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv)
+    eval_env = make_vec_env("CartPole-v1", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv)
 
     model = PPO(
         policy="MlpPolicy",
@@ -34,7 +34,7 @@ def main(seed, save, verbose):
         seed=seed,
     )
 
-    reward_threshold = -100.0
+    reward_threshold = 475.0
     callback_on_best = StopTrainingOnRewardThreshold(
         reward_threshold=reward_threshold, verbose=verbose
     )
