@@ -36,8 +36,8 @@ class PPO:
         gamma=0.99,
         learning_rate=3e-4,
         gae_lambda=0.95,
-        batch_size=32,
-        minibatch_size=4,
+        batch_size=64,
+        minibatch_size=16,
         update_epochs=4,
         clip_coef=0.2,
         norm_adv=True,
@@ -76,6 +76,12 @@ class PPO:
         self.target_kl = target_kl
         self.device = device
 
+    def _check_final_info(self, infos):
+        if "final_info" in infos:
+            for info in infos["final_info"]:
+                if info and "episode" in info and "r" in info["episode"]:
+                    self.rollout_buffer.add_episode_return(info["episode"]["r"])
+
     def collect_rollout(
         self,
         global_step,
@@ -86,63 +92,67 @@ class PPO:
 
         for step in range(0, self.num_steps):
             global_step += self.num_envs
-            obs_step = next_obs
-            dones_step = next_done
-
-            with torch.no_grad():
-                action, logprob, _, value = self.policy.get_action_and_value(next_obs)
-                values_step = value.flatten()
-            actions_step = action
-            logprobs_step = logprob
-
-            next_obs, reward, terminations, truncations, infos = self.envs.step(
-                action.cpu().numpy()
-            )
-            next_done = np.logical_or(terminations, truncations)
-            rewards_step = torch.tensor(reward).to(self.device).view(-1)
-            next_obs = torch.Tensor(next_obs).to(self.device)
-            next_done = torch.Tensor(next_done).to(self.device)
-
-            self.rollout_buffer.add(
-                obs_step,
-                actions_step,
-                logprobs_step,
-                rewards_step,
-                dones_step,
-                values_step,
-            )
-
-            if "final_info" in infos:
-                for info in infos["final_info"]:
-                    if info and "episode" in info and "r" in info["episode"]:
-                        self.rollout_buffer.add_episode_return(info["episode"]["r"])
+            next_obs, next_done = self._collect_step(next_obs, next_done)
 
         return next_obs, next_done, global_step
 
-    def compute_advantages_returns(self, next_obs, next_done):
+    def _collect_step(self, next_obs, next_done):
+        obs = next_obs
+        done = next_done
+
         with torch.no_grad():
-            next_value = self.policy.get_value(next_obs).reshape(1, -1)
-            advantages = torch.zeros_like(self.rollout_buffer.rewards).to(self.device)
-            lastgaelam = 0
-            for t in reversed(range(self.rollout_buffer.step)):
-                if t == self.rollout_buffer.step - 1:
-                    nextnonterminal = 1.0 - next_done
-                    nextvalues = next_value
-                else:
-                    nextnonterminal = 1.0 - self.rollout_buffer.dones[t + 1]
-                    nextvalues = self.rollout_buffer.values[t + 1]
-                delta = (
-                    self.rollout_buffer.rewards[t]
-                    + self.gamma * nextvalues * nextnonterminal
-                    - self.rollout_buffer.values[t]
-                )
-                advantages[t] = lastgaelam = (
-                    delta + self.gamma * self.gae_lambda * nextnonterminal * lastgaelam
-                )
+            action, logprob, _, value = self.policy.get_action_and_value(next_obs)
+            value = value.flatten()
+
+        next_obs, reward, terminations, truncations, infos = self.envs.step(
+            action.cpu().numpy()
+        )
+        next_done = np.logical_or(terminations, truncations)
+        reward = torch.tensor(reward).to(self.device).view(-1)
+        next_obs = torch.Tensor(next_obs).to(self.device)
+        next_done = torch.Tensor(next_done).to(self.device)
+
+        self.rollout_buffer.add(
+            obs,
+            action,
+            logprob,
+            reward,
+            done,
+            value,
+        )
+
+        self._check_final_info(infos)
+        return next_obs, next_done
+
+    def _compute_advantages_returns(self, next_obs, next_done):
+        with torch.no_grad():
+            advantages = self._compute_advantages(next_obs, next_done)
             returns = advantages + self.rollout_buffer.values
         return advantages, returns
 
-    def anneal_learning_rate(self, iteration, num_iterations):
+    def _compute_advantages(self, next_obs, next_done):
+        next_value = self.policy.get_value(next_obs).reshape(1, -1)
+        advantages = torch.zeros_like(self.rollout_buffer.rewards).to(self.device)
+        lastgaelam = 0
+        for t in reversed(range(self.rollout_buffer.step)):
+            if t == self.rollout_buffer.step - 1:
+                nextnonterminal = 1.0 - next_done
+                nextvalues = next_value
+            else:
+                nextnonterminal = 1.0 - self.rollout_buffer.dones[t + 1]
+                nextvalues = self.rollout_buffer.values[t + 1]
+            delta = (
+                self.rollout_buffer.rewards[t]
+                + self.gamma * nextvalues * nextnonterminal
+                - self.rollout_buffer.values[t]
+            )
+            advantages[t] = lastgaelam = (
+                delta + self.gamma * self.gae_lambda * nextnonterminal * lastgaelam
+            )
+
+        return advantages
+
+    def _anneal_learning_rate(self, iteration, num_iterations):
         frac = 1.0 - (iteration - 1.0) / num_iterations
         self.current_lr = frac * self.learning_rate
         self.optimizer.param_groups[0]["lr"] = self.current_lr
@@ -172,57 +182,24 @@ class PPO:
                 end = start + self.minibatch_size
                 mb_inds = b_inds[start:end]
 
-                _, newlogprob, entropy, newvalue = self.policy.get_action_and_value(
-                    b_obs[mb_inds], b_actions.long()[mb_inds]
-                )
-                logratio = newlogprob - b_logprobs[mb_inds]
-                ratio = logratio.exp()
-
-                with torch.no_grad():
-                    old_approx_kl = (-logratio).mean()
-                    approx_kl = ((ratio - 1) - logratio).mean()
-                    clipfracs += [
-                        ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
-                    ]
-
+                mb_obs = b_obs[mb_inds]
+                mb_actions = b_actions.long()[mb_inds]
+                mb_logprobs = b_logprobs[mb_inds]
+                mb_returns = b_returns[mb_inds]
+                mb_values = b_values[mb_inds]
                 mb_advantages = b_advantages[mb_inds]
-                if self.norm_adv:
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (
-                        mb_advantages.std() + 1e-8
+
+                clipfrac, old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss = (
+                    self._calculate_policy_loss(
+                        mb_obs,
+                        mb_actions,
+                        mb_logprobs,
+                        mb_returns,
+                        mb_values,
+                        mb_advantages,
                     )
-
-                # Policy loss
-                pg_loss1 = -mb_advantages * ratio
-                pg_loss2 = -mb_advantages * torch.clamp(
-                    ratio, 1 - self.clip_coef, 1 + self.clip_coef
                 )
-                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
-
-                # Value loss
-                newvalue = newvalue.view(-1)
-                if self.clip_vloss:
-                    v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
-                    v_clipped = b_values[mb_inds] + torch.clamp(
-                        newvalue - b_values[mb_inds],
-                        -self.clip_coef,
-                        self.clip_coef,
-                    )
-                    v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
-                    v_loss = torch.max(v_loss_unclipped, v_loss_clipped).mean()
-                else:
-                    v_loss = ((newvalue - b_returns[mb_inds]) ** 2).mean()
-
-                entropy_loss = entropy.mean()
-                loss = (
-                    pg_loss
-                    - self.ent_coef * entropy_loss
-                    + (v_loss / 2.0) * self.vf_coef
-                )
-
-                self.optimizer.zero_grad()
-                loss.backward()
-                nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
-                self.optimizer.step()
+                clipfracs += clipfrac
 
             if self.target_kl is not None and approx_kl > self.target_kl:
                 break
@@ -241,6 +218,61 @@ class PPO:
             explained_var,
         )
 
+    def _calculate_policy_loss(
+        self,
+        mb_obs,
+        mb_actions,
+        mb_logprobs,
+        mb_returns,
+        mb_values,
+        mb_advantages,
+    ):
+        _, newlogprob, entropy, newvalue = self.policy.get_action_and_value(
+            mb_obs, mb_actions
+        )
+        logratio = newlogprob - mb_logprobs
+        ratio = logratio.exp()
+
+        with torch.no_grad():
+            old_approx_kl = (-logratio).mean()
+            approx_kl = ((ratio - 1) - logratio).mean()
+            clipfracs = [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
+
+        if self.norm_adv:
+            mb_advantages = (mb_advantages - mb_advantages.mean()) / (
+                mb_advantages.std() + 1e-8
+            )
+
+            # Policy loss
+        pg_loss1 = -mb_advantages * ratio
+        pg_loss2 = -mb_advantages * torch.clamp(
+            ratio, 1 - self.clip_coef, 1 + self.clip_coef
+        )
+        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+        # Value loss
+        newvalue = newvalue.view(-1)
+        if self.clip_vloss:
+            v_loss_unclipped = (newvalue - mb_returns) ** 2
+            v_clipped = mb_values + torch.clamp(
+                newvalue - mb_values,
+                -self.clip_coef,
+                self.clip_coef,
+            )
+            v_loss_clipped = (v_clipped - mb_returns) ** 2
+            v_loss = torch.max(v_loss_unclipped, v_loss_clipped).mean()
+        else:
+            v_loss = ((newvalue - mb_returns) ** 2).mean()
+
+        entropy_loss = entropy.mean()
+        loss = pg_loss - self.ent_coef * entropy_loss + (v_loss / 2.0) * self.vf_coef
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
+        self.optimizer.step()
+        return clipfracs, old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss
+
     def learn(self, num_iterations, seed, anneal_lr=True):
         global_step = 0
         start_time = time.time()
@@ -252,13 +284,13 @@ class PPO:
         checkpoint = 10_000
         while global_step < num_iterations:
             if anneal_lr:
-                self.anneal_learning_rate(global_step, num_iterations)
+                self._anneal_learning_rate(global_step, num_iterations)
             next_obs, next_done, global_step = self.collect_rollout(
                 global_step,
                 next_obs,
                 next_done,
             )
-            advantages, returns = self.compute_advantages_returns(
+            advantages, returns = self._compute_advantages_returns(
                 next_obs,
                 next_done,
             )

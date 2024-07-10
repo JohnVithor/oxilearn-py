@@ -41,7 +41,7 @@ if __name__ == "__main__":
         optimizer,
         envs,
         eval_env,
-        num_steps=100,
+        num_steps=200,
         num_envs=num_envs,
         device=device,
     )
