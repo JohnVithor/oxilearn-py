@@ -10,39 +10,35 @@ from agent import PPO
 
 if __name__ == "__main__":
     env_id = "CartPole-v1"
-    num_envs = 4
-
     seed = 0
-    # TRY NOT TO MODIFY: seeding
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
 
-    envs = gym.vector.SyncVectorEnv(
-        [
-            lambda: gym.wrappers.RecordEpisodeStatistics(gym.make(env_id))
-            for _ in range(num_envs)
-        ],
-    )
+    env = gym.wrappers.RecordEpisodeStatistics(gym.make(env_id))
     eval_env = gym.make(env_id)
+    eval_env.reset(seed=seed)
+
     assert isinstance(
-        envs.single_action_space, gym.spaces.Discrete
+        env.action_space, gym.spaces.Discrete
     ), "only discrete action space is supported"
+
     policy = Policy(
-        np.array(envs.single_observation_space.shape).prod(), envs.single_action_space.n
+        np.array(env.observation_space.shape).prod(), env.action_space.n
     ).to(device)
-    optimizer = optim.Adam(policy.parameters(), lr=2.5e-4, eps=1e-5)
+
+    optimizer = optim.Adam(policy.parameters(), lr=0.0005)
 
     trainer = PPO(
         policy,
         optimizer,
-        envs,
+        env,
         eval_env,
-        num_steps=200,
-        num_envs=num_envs,
+        num_steps=100,
+        learning_rate=0.0005,
         device=device,
     )
 
@@ -52,4 +48,4 @@ if __name__ == "__main__":
     results = trainer.evaluate(10)
     print(f"Results: {results}")
 
-    envs.close()
+    env.close()

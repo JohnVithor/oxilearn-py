@@ -1,19 +1,16 @@
+import gymnasium
 import torch
 
 
 class Rollout:
 
-    def __init__(self, num_steps: int, num_envs: int, envs, device: str) -> None:
-        self.obs = torch.zeros(
-            (num_steps, num_envs) + envs.single_observation_space.shape
-        ).to(device)
-        self.actions = torch.zeros(
-            (num_steps, num_envs) + envs.single_action_space.shape
-        ).to(device)
-        self.logprobs = torch.zeros((num_steps, num_envs)).to(device)
-        self.rewards = torch.zeros((num_steps, num_envs)).to(device)
-        self.dones = torch.zeros((num_steps, num_envs)).to(device)
-        self.values = torch.zeros((num_steps, num_envs)).to(device)
+    def __init__(self, num_steps: int, env: gymnasium.Env, device: str) -> None:
+        self.obs = torch.zeros((num_steps,) + env.observation_space.shape).to(device)
+        self.actions = torch.zeros((num_steps,) + env.action_space.shape).to(device)
+        self.logprobs = torch.zeros((num_steps)).to(device)
+        self.rewards = torch.zeros((num_steps)).to(device)
+        self.dones = torch.zeros((num_steps)).to(device)
+        self.values = torch.zeros((num_steps)).to(device)
 
         self.episode_returns = []
 

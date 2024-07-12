@@ -29,10 +29,9 @@ class PPO:
         self,
         policy: Policy,
         optimizer,
-        envs: gymnasium.Env,
+        env: gymnasium.Env,
         eval_env: gymnasium.Env,
         num_steps=128,
-        num_envs=4,
         gamma=0.99,
         learning_rate=3e-4,
         gae_lambda=0.95,
@@ -50,15 +49,10 @@ class PPO:
     ) -> None:
         self.policy = policy
         self.optimizer = optimizer
-        self.envs = envs
+        self.env = env
         self.eval_env = eval_env
-        self.num_steps = (
-            envs.spec.max_episode_steps
-            if envs.spec and envs.spec.max_episode_steps
-            else num_steps
-        )
-        self.num_envs = num_envs
-        self.rollout_buffer = Rollout(num_steps, num_envs, envs, device)
+        self.num_steps = num_steps
+        self.rollout_buffer = Rollout(self.num_steps, env, device)
         self.gamma = gamma
         self.gae_lambda = gae_lambda
         self.batch_size = batch_size
@@ -66,7 +60,6 @@ class PPO:
         self.update_epochs = update_epochs
         self.learning_rate = learning_rate
         self.current_lr = learning_rate
-        # self.optimizer.param_groups[0]["lr"]
         self.clip_coef = clip_coef
         self.norm_adv = norm_adv
         self.clip_vloss = clip_vloss
@@ -84,17 +77,15 @@ class PPO:
 
     def collect_rollout(
         self,
-        global_step,
         next_obs,
         next_done,
     ):
         self.rollout_buffer.reset()
 
-        for step in range(0, self.num_steps):
-            global_step += self.num_envs
+        for _ in range(0, self.num_steps):
             next_obs, next_done = self._collect_step(next_obs, next_done)
 
-        return next_obs, next_done, global_step
+        return next_obs, next_done
 
     def _collect_step(self, next_obs, next_done):
         obs = next_obs
@@ -104,13 +95,14 @@ class PPO:
             action, logprob, _, value = self.policy.get_action_and_value(next_obs)
             value = value.flatten()
 
-        next_obs, reward, terminations, truncations, infos = self.envs.step(
+        next_obs, reward, terminations, truncations, infos = self.env.step(
             action.cpu().numpy()
         )
-        next_done = np.logical_or(terminations, truncations)
+        next_done = float(np.logical_or(terminations, truncations))
         reward = torch.tensor(reward).to(self.device).view(-1)
+        if next_done:
+            next_obs, _ = self.env.reset()
         next_obs = torch.Tensor(next_obs).to(self.device)
-        next_done = torch.Tensor(next_done).to(self.device)
 
         self.rollout_buffer.add(
             obs,
@@ -159,16 +151,45 @@ class PPO:
 
     def _flatten_data(self, advantages, returns):
         b_obs = self.rollout_buffer.obs.reshape(
-            (-1,) + self.envs.single_observation_space.shape
+            (-1,) + self.env.observation_space.shape
         )
         b_logprobs = self.rollout_buffer.logprobs.reshape(-1)
         b_actions = self.rollout_buffer.actions.reshape(
-            (-1,) + self.envs.single_action_space.shape
+            (-1,) + self.env.action_space.shape
         )
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = self.rollout_buffer.values.reshape(-1)
         return b_obs, b_logprobs, b_actions, b_advantages, b_returns, b_values
+
+    def _optimize_epoch(
+        self, b_inds, b_obs, b_actions, b_logprobs, b_returns, b_values, b_advantages
+    ):
+        np.random.shuffle(b_inds)
+        epoch_clipfracs = []
+        for start in range(0, self.batch_size, self.minibatch_size):
+            end = start + self.minibatch_size
+            mb_inds = b_inds[start:end]
+
+            mb_obs = b_obs[mb_inds]
+            mb_actions = b_actions.long()[mb_inds]
+            mb_logprobs = b_logprobs[mb_inds]
+            mb_returns = b_returns[mb_inds]
+            mb_values = b_values[mb_inds]
+            mb_advantages = b_advantages[mb_inds]
+
+            clipfrac, old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss = (
+                self._calculate_policy_loss(
+                    mb_obs,
+                    mb_actions,
+                    mb_logprobs,
+                    mb_returns,
+                    mb_values,
+                    mb_advantages,
+                )
+            )
+            epoch_clipfracs += clipfrac
+        return epoch_clipfracs, old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss
 
     def optimize(self, advantages, returns):
         b_obs, b_logprobs, b_actions, b_advantages, b_returns, b_values = (
@@ -177,30 +198,18 @@ class PPO:
         b_inds = np.arange(self.batch_size)
         clipfracs = []
         for epoch in range(self.update_epochs):
-            np.random.shuffle(b_inds)
-            for start in range(0, self.batch_size, self.minibatch_size):
-                end = start + self.minibatch_size
-                mb_inds = b_inds[start:end]
-
-                mb_obs = b_obs[mb_inds]
-                mb_actions = b_actions.long()[mb_inds]
-                mb_logprobs = b_logprobs[mb_inds]
-                mb_returns = b_returns[mb_inds]
-                mb_values = b_values[mb_inds]
-                mb_advantages = b_advantages[mb_inds]
-
-                clipfrac, old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss = (
-                    self._calculate_policy_loss(
-                        mb_obs,
-                        mb_actions,
-                        mb_logprobs,
-                        mb_returns,
-                        mb_values,
-                        mb_advantages,
-                    )
+            epoch_clipfracs, old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss = (
+                self._optimize_epoch(
+                    b_inds,
+                    b_obs,
+                    b_actions,
+                    b_logprobs,
+                    b_returns,
+                    b_values,
+                    b_advantages,
                 )
-                clipfracs += clipfrac
-
+            )
+            clipfracs += epoch_clipfracs
             if self.target_kl is not None and approx_kl > self.target_kl:
                 break
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
@@ -235,7 +244,7 @@ class PPO:
 
         with torch.no_grad():
             old_approx_kl = (-logratio).mean()
-            approx_kl = ((ratio - 1) - logratio).mean()
+            approx_kl = ((ratio - 1.0) - logratio).mean()
             clipfracs = [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
 
         if self.norm_adv:
@@ -243,14 +252,12 @@ class PPO:
                 mb_advantages.std() + 1e-8
             )
 
-            # Policy loss
         pg_loss1 = -mb_advantages * ratio
         pg_loss2 = -mb_advantages * torch.clamp(
-            ratio, 1 - self.clip_coef, 1 + self.clip_coef
+            ratio, 1.0 - self.clip_coef, 1.0 + self.clip_coef
         )
         pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
-        # Value loss
         newvalue = newvalue.view(-1)
         if self.clip_vloss:
             v_loss_unclipped = (newvalue - mb_returns) ** 2
@@ -276,17 +283,16 @@ class PPO:
     def learn(self, num_iterations, seed, anneal_lr=True):
         global_step = 0
         start_time = time.time()
-        next_obs, _ = self.envs.reset(seed=seed)
+        next_obs, _ = self.env.reset(seed=seed)
         next_obs = torch.Tensor(next_obs).to(self.device)
-        next_done = torch.zeros(self.num_envs).to(self.device)
+        next_done = 0
 
         results = []
-        checkpoint = 10_000
-        while global_step < num_iterations:
+        checkpoint = num_iterations // 10
+        for global_step in range(0, num_iterations, self.num_steps):
             if anneal_lr:
                 self._anneal_learning_rate(global_step, num_iterations)
-            next_obs, next_done, global_step = self.collect_rollout(
-                global_step,
+            next_obs, next_done = self.collect_rollout(
                 next_obs,
                 next_done,
             )
@@ -297,7 +303,7 @@ class PPO:
             result = self.optimize(advantages, returns)
             results.append(result)
             if global_step >= checkpoint:
-                checkpoint += 10_000
+                checkpoint += num_iterations // 10
                 mean_epi_return = np.nanmean(self.evaluate())
                 print(f"step {global_step}/{num_iterations} mean: {mean_epi_return}")
                 if mean_epi_return > self.eval_env.spec.reward_threshold:
