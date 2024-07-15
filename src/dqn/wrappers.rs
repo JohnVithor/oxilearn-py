@@ -9,7 +9,7 @@ use tch::{
   Device, Kind, Tensor,
 };
 
-use crate::{env::{pyenv::PyEnv, space_info::SpaceInfo}, OxiLearnErr};
+use crate::{env::{PyEnv, SpaceInfo}, OxiLearnErr};
 
 use super::{agent::DQNAgent, epsilon_greedy::{EpsilonGreedy, EpsilonUpdateStrategy}, experience_buffer::RandomExperienceBuffer, losses::{huber, mae, mse, rmse, smooth_l1}, optimizer_enum::OptimizerEnum, policy::{generate_policy, ActivationFunction}, trainer::{TrainResults, Trainer}};
 

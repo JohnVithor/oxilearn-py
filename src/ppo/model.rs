@@ -1,6 +1,8 @@
 use tch::nn::LinearConfig;
 use tch::nn::ModuleT;
 use tch::nn::SequentialT;
+use tch::nn::VarStore;
+use tch::Device;
 use tch::{nn, Tensor};
 
 use super::categorical::Categorical;
@@ -9,10 +11,11 @@ use super::categorical::Categorical;
 pub struct Policy {
     critic: SequentialT,
     actor: SequentialT,
+    vs: nn::VarStore,
 }
 
 impl Policy {
-    pub fn new(vs: &nn::Path, obs_shape: i64, num_actions: i64) -> Self {
+    pub fn new(obs_shape: i64, num_actions: i64, device: Device) -> Self {
         let config = LinearConfig {
             ws_init: tch::nn::Init::Orthogonal {
                 gain: 2.0_f64.sqrt(),
@@ -20,6 +23,8 @@ impl Policy {
             bs_init: Some(tch::nn::Init::Const(0.0)),
             bias: true,
         };
+
+        let vs: VarStore = VarStore::new(device);
 
         let config2 = LinearConfig {
             ws_init: tch::nn::Init::Orthogonal { gain: 1.0 },
@@ -34,20 +39,49 @@ impl Policy {
         };
 
         let critic = nn::seq_t()
-            .add(nn::linear(vs, obs_shape, 64, config))
+            .add(nn::linear(
+                vs.root() / format!("critic/{}", 1),
+                obs_shape,
+                64,
+                config,
+            ))
             .add_fn(|xs| xs.gelu("none"))
-            .add(nn::linear(vs, 64, 64, config))
+            .add(nn::linear(
+                vs.root() / format!("critic/{}", 2),
+                64,
+                64,
+                config,
+            ))
             .add_fn(|xs| xs.gelu("none"))
-            .add(nn::linear(vs, 64, 1, config2));
+            .add(nn::linear(
+                vs.root() / format!("critic/{}", 3),
+                64,
+                1,
+                config2,
+            ));
 
         let actor = nn::seq_t()
-            .add(nn::linear(vs, obs_shape, 64, config))
+            .add(nn::linear(
+                vs.root() / format!("actor/{}", 1),
+                obs_shape,
+                64,
+                config,
+            ))
             .add_fn(|xs| xs.gelu("none"))
-            .add(nn::linear(vs, 64, 64, config))
+            .add(nn::linear(
+                vs.root() / format!("actor/{}", 2),
+                64,
+                64,
+                config,
+            ))
             .add_fn(|xs| xs.gelu("none"))
-            .add(nn::linear(vs, 64, num_actions, config3));
-
-        Policy { critic, actor }
+            .add(nn::linear(
+                vs.root() / format!("actor/{}", 3),
+                64,
+                num_actions,
+                config3,
+            ));
+        Policy { critic, actor, vs }
     }
 
     pub fn get_value(&self, x: &Tensor) -> Tensor {
@@ -57,13 +91,13 @@ impl Policy {
     pub fn get_action_and_value(
         &self,
         x: &Tensor,
-        action: Option<Tensor>,
+        action: Option<&Tensor>,
     ) -> (Tensor, Tensor, Tensor, Tensor) {
         let logits = self.actor.forward_t(x, true);
         let probs = Categorical::from_logits(logits);
 
         let action = match action {
-            Some(a) => a,
+            Some(a) => a.shallow_clone(),
             None => probs.sample(&[]),
         };
 
@@ -77,5 +111,9 @@ impl Policy {
     pub fn get_best_action(&self, x: &Tensor) -> Tensor {
         let logits = self.actor.forward_t(x, true);
         logits.argmax(-1, true)
+    }
+
+    pub fn varstore(&self) -> &nn::VarStore {
+        &self.vs
     }
 }

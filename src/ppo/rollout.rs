@@ -1,57 +1,31 @@
 use tch::{Device, Tensor};
 
+use crate::env::PyEnv;
+
 pub struct Rollout {
-    obs: Tensor,
-    actions: Tensor,
-    logprobs: Tensor,
-    rewards: Tensor,
-    dones: Tensor,
-    values: Tensor,
-    episode_returns: Vec<f64>,
-    step: usize,
+    pub obs: Tensor,
+    pub actions: Tensor,
+    pub logprobs: Tensor,
+    pub rewards: Tensor,
+    pub dones: Tensor,
+    pub values: Tensor,
+    pub episode_returns: Vec<f64>,
+    pub step: usize,
 }
 
 impl Rollout {
-    pub fn new(
-        num_steps: usize,
-        num_envs: usize,
-        obs_shape: &[i64],
-        action_shape: &[i64],
-        device: Device,
-    ) -> Self {
-        Rollout {
-            obs: Tensor::zeros(
-                [num_steps as i64, num_envs as i64]
-                    .iter()
-                    .chain(obs_shape)
-                    .cloned()
-                    .collect::<Vec<_>>(),
-                (tch::Kind::Float, device),
-            ),
-            actions: Tensor::zeros(
-                [num_steps as i64, num_envs as i64]
-                    .iter()
-                    .chain(action_shape)
-                    .cloned()
-                    .collect::<Vec<_>>(),
-                (tch::Kind::Float, device),
-            ),
-            logprobs: Tensor::zeros(
-                [num_steps as i64, num_envs as i64],
-                (tch::Kind::Float, device),
-            ),
-            rewards: Tensor::zeros(
-                [num_steps as i64, num_envs as i64],
-                (tch::Kind::Float, device),
-            ),
-            dones: Tensor::zeros(
-                [num_steps as i64, num_envs as i64],
-                (tch::Kind::Float, device),
-            ),
-            values: Tensor::zeros(
-                [num_steps as i64, num_envs as i64],
-                (tch::Kind::Float, device),
-            ),
+    pub fn new(num_steps: usize, env: &PyEnv, device: Device) -> Self {
+        let obs_size = env.observation_space().unwrap().shape();
+        let action_size = env.action_space().unwrap().shape();
+
+        let capacity = num_steps as i64;
+        Self {
+            obs: Tensor::empty([capacity, obs_size], (tch::Kind::Double, device)),
+            actions: Tensor::empty([capacity, action_size], (tch::Kind::Double, device)),
+            logprobs: Tensor::empty(capacity, (tch::Kind::Double, device)),
+            rewards: Tensor::empty(capacity, (tch::Kind::Double, device)),
+            dones: Tensor::empty(capacity, (tch::Kind::Int8, device)),
+            values: Tensor::empty(capacity, (tch::Kind::Double, device)),
             episode_returns: Vec::new(),
             step: 0,
         }
@@ -59,19 +33,19 @@ impl Rollout {
 
     pub fn add(
         &mut self,
-        obs: Tensor,
-        action: Tensor,
-        logprob: Tensor,
-        reward: Tensor,
-        done: Tensor,
-        value: Tensor,
+        obs: &Tensor,
+        action: &Tensor,
+        logprob: &Tensor,
+        reward: f64,
+        done: bool,
+        value: &Tensor,
     ) {
-        self.obs.get(self.step as i64).copy_(&obs);
-        self.actions.get(self.step as i64).copy_(&action);
-        self.logprobs.get(self.step as i64).copy_(&logprob);
-        self.rewards.get(self.step as i64).copy_(&reward);
-        self.dones.get(self.step as i64).copy_(&done);
-        self.values.get(self.step as i64).copy_(&value);
+        self.obs.get(self.step as i64).copy_(obs);
+        self.actions.get(self.step as i64).copy_(action);
+        self.logprobs.get(self.step as i64).copy_(logprob);
+        self.rewards.get(self.step as i64).fill_(reward);
+        self.dones.get(self.step as i64).fill_(done as i64);
+        self.values.get(self.step as i64).copy_(value);
 
         self.step += 1;
     }

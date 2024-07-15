@@ -1,6 +1,6 @@
 use tch::Tensor;
 
-use crate::{env::pyenv::PyEnv, OxiLearnErr};
+use crate::{env::PyEnv, OxiLearnErr};
 
 use super::agent::DQNAgent;
 
@@ -42,7 +42,7 @@ impl Trainer {
         eval_for: u32,
         verbose: usize,
     ) -> Result<TrainResults, OxiLearnErr> {
-        let mut curr_obs: Tensor = self.env.reset()?;
+        let mut curr_obs: Tensor = self.env.reset(None)?;
         let mut training_reward: Vec<f32> = vec![];
         let mut training_length: Vec<u32> = vec![];
         let mut training_error: Vec<f32> = vec![];
@@ -77,7 +77,7 @@ impl Trainer {
                 if n_episodes % update_freq == 0 && agent.update_networks().is_err() {
                     println!("copy error")
                 }
-                curr_obs = self.env.reset()?;
+                curr_obs = self.env.reset(None)?;
 
                 agent.action_selection_update(step as f32 / n_steps as f32, epi_reward);
                 n_episodes += 1;
@@ -126,7 +126,7 @@ impl Trainer {
         let mut episode_length: Vec<u32> = vec![];
         for _episode in 0..n_episodes {
             let mut epi_reward: f32 = 0.0;
-            let obs_repr = self.eval_env.reset()?;
+            let obs_repr = self.eval_env.reset(None)?;
             let mut curr_action = agent.get_best_action(&obs_repr);
             let mut action_counter: u32 = 0;
             loop {

@@ -18,7 +18,6 @@ OptimizationResults = namedtuple(
         "entropy",
         "old_approx_kl",
         "approx_kl",
-        "clipfrac",
         "explained_variance",
     ],
 )
@@ -166,7 +165,6 @@ class PPO:
         self, b_inds, b_obs, b_actions, b_logprobs, b_returns, b_values, b_advantages
     ):
         np.random.shuffle(b_inds)
-        epoch_clipfracs = []
         for start in range(0, self.batch_size, self.minibatch_size):
             end = start + self.minibatch_size
             mb_inds = b_inds[start:end]
@@ -178,7 +176,7 @@ class PPO:
             mb_values = b_values[mb_inds]
             mb_advantages = b_advantages[mb_inds]
 
-            clipfrac, old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss = (
+            old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss = (
                 self._calculate_policy_loss(
                     mb_obs,
                     mb_actions,
@@ -188,17 +186,15 @@ class PPO:
                     mb_advantages,
                 )
             )
-            epoch_clipfracs += clipfrac
-        return epoch_clipfracs, old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss
+        return old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss
 
     def optimize(self, advantages, returns):
         b_obs, b_logprobs, b_actions, b_advantages, b_returns, b_values = (
             self._flatten_data(advantages, returns)
         )
         b_inds = np.arange(self.batch_size)
-        clipfracs = []
         for epoch in range(self.update_epochs):
-            epoch_clipfracs, old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss = (
+            old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss = (
                 self._optimize_epoch(
                     b_inds,
                     b_obs,
@@ -209,7 +205,6 @@ class PPO:
                     b_advantages,
                 )
             )
-            clipfracs += epoch_clipfracs
             if self.target_kl is not None and approx_kl > self.target_kl:
                 break
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
@@ -223,7 +218,6 @@ class PPO:
             entropy_loss.item(),
             old_approx_kl.item(),
             approx_kl.item(),
-            np.mean(clipfracs),
             explained_var,
         )
 
@@ -245,7 +239,6 @@ class PPO:
         with torch.no_grad():
             old_approx_kl = (-logratio).mean()
             approx_kl = ((ratio - 1.0) - logratio).mean()
-            clipfracs = [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
 
         if self.norm_adv:
             mb_advantages = (mb_advantages - mb_advantages.mean()) / (
@@ -278,7 +271,7 @@ class PPO:
         loss.backward()
         nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
         self.optimizer.step()
-        return clipfracs, old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss
+        return old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss
 
     def learn(self, num_iterations, seed, anneal_lr=True):
         global_step = 0
