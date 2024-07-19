@@ -13,7 +13,6 @@ pub struct Rollout {
     pub step: usize,
     pub device: Device,
     obs_size: i64,
-    action_size: i64,
 }
 
 impl Rollout {
@@ -33,7 +32,6 @@ impl Rollout {
             step: 0,
             device,
             obs_size,
-            action_size,
         }
     }
 
@@ -52,10 +50,6 @@ impl Rollout {
 
         self.obs = self.obs.put(index, obs, false);
 
-        // let index: i64 = self.action_size * self.step as i64;
-        // let index = Vec::from_iter(index..(index + self.action_size));
-        // let index = &Tensor::from_slice(&index).to_device(self.device);
-
         let index = &Tensor::from_slice(&[self.step as i64]).to_device(self.device);
 
         let reward = &Tensor::from(reward)
@@ -64,7 +58,6 @@ impl Rollout {
         let done = &Tensor::from(done)
             .to_device(self.device)
             .to_kind(Kind::Int8);
-
         self.actions = self.actions.put(index, action, false);
         self.logprobs = self.logprobs.put(index, logprob, false);
         self.rewards = self.rewards.put(index, reward, false);

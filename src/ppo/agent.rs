@@ -95,7 +95,6 @@ impl PPOAgent {
     pub fn collect_rollout(&mut self, mut next_obs: Tensor, mut next_done: bool) -> (Tensor, bool) {
         self.rollout_buffer.reset();
 
-        println!("collect_rollout");
         for _ in 0..self.num_steps {
             let (new_next_obs, new_next_done) = self.collect_step(next_obs, next_done);
             next_obs = new_next_obs;
@@ -110,12 +109,7 @@ impl PPOAgent {
         let done = next_done;
 
         let (action, logprob, _, value) = self.policy.get_action_and_value(&next_obs, None);
-        println!("flatten");
-        println!("value = {value}");
         let value = value.flatten(0, -1);
-        println!("flatten value = {value}");
-        println!("action value = {action}");
-        println!("logprob value = {logprob}");
 
         let b_action = action.shallow_clone();
         let action_v: i64 = action.try_into().unwrap();
@@ -128,12 +122,6 @@ impl PPOAgent {
         } else {
             new_obs.to_device(self.device)
         };
-        println!("obs value = {obs}");
-        println!("b_action value = {b_action}");
-        println!("logprob value = {logprob}");
-        println!("reward value = {reward}");
-        println!("done value = {done}");
-        println!("value value = {value}");
 
         self.rollout_buffer
             .add(&obs, &b_action, &logprob, reward as f64, done, &value);
@@ -153,8 +141,9 @@ impl PPOAgent {
     }
 
     fn compute_advantages(&mut self, next_obs: &Tensor, next_done: bool) -> Tensor {
-        let next_value = self.policy.get_value(next_obs).reshape(&[1, -1]);
-        let advantages = Tensor::zeros_like(&self.rollout_buffer.rewards);
+        let next_value = self.policy.get_value(next_obs).reshape([1, -1]);
+        let mut advantages =
+            Tensor::zeros_like(&self.rollout_buffer.rewards).to_device(self.device);
         let mut lastgaelam = 0.0;
 
         for t in (0..self.rollout_buffer.step).rev() {
@@ -162,18 +151,20 @@ impl PPOAgent {
             let nextnonterminal = if t == self.rollout_buffer.step - 1 {
                 1.0 - next_done as i64 as f64
             } else {
-                1.0 - self.rollout_buffer.dones.get(id + 1).double_value(&[0])
+                let a: f64 = self.rollout_buffer.dones.get(id + 1).try_into().unwrap();
+                1.0 - a
             };
-            let mut nextvalues = &self.rollout_buffer.values.get(id + 1);
-            if t == self.rollout_buffer.step - 1 {
-                nextvalues = &next_value
+            let mut nextvalues = next_value.shallow_clone();
+            if t != self.rollout_buffer.step - 1 {
+                nextvalues = self.rollout_buffer.values.get(id + 1)
             }
             let delta = &self.rollout_buffer.rewards.get(id)
                 + self.gamma * nextvalues * nextnonterminal
                 - &self.rollout_buffer.values.get(id);
             let advj = delta + self.gamma * self.gae_lambda * nextnonterminal * lastgaelam;
-            advantages.get(id).copy_(&advj);
-            lastgaelam = advj.double_value(&[0]);
+            let index = &Tensor::from_slice(&[id]).to_device(self.device);
+            advantages = advantages.put(index, &advj, false);
+            lastgaelam = advj.try_into().unwrap();
         }
 
         advantages
@@ -229,17 +220,19 @@ impl PPOAgent {
         let mut final_pg_loss = 0.0;
         let mut final_v_loss = 0.0;
         let mut final_entropy_loss = 0.0;
-
+        println!("b_actions: {}", b_actions);
         for start in (0..self.batch_size).step_by(self.minibatch_size) {
             let end = start + self.minibatch_size;
             let mb_inds = &b_inds[start..end];
+            let index = &Tensor::from_slice(mb_inds).to_device(self.device);
+            let mb_obs = b_obs.index_select(0, index);
+            let mb_actions = b_actions.index_select(0, index);
+            let mb_logprobs = b_logprobs.index_select(0, index);
+            let mb_returns = b_returns.index_select(0, index);
+            let mb_values = b_values.index_select(0, index);
+            let mb_advantages = b_advantages.index_select(0, index);
 
-            let mb_obs = b_obs.index_select(0, &Tensor::from_slice(mb_inds));
-            let mb_actions = b_actions.index_select(0, &Tensor::from_slice(mb_inds));
-            let mb_logprobs = b_logprobs.index_select(0, &Tensor::from_slice(mb_inds));
-            let mb_returns = b_returns.index_select(0, &Tensor::from_slice(mb_inds));
-            let mb_values = b_values.index_select(0, &Tensor::from_slice(mb_inds));
-            let mb_advantages = b_advantages.index_select(0, &Tensor::from_slice(mb_inds));
+            println!("mb_actions: {}", mb_actions);
 
             let (old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss) = self
                 .calculate_policy_loss(
@@ -277,7 +270,7 @@ impl PPOAgent {
         let mut v_loss = 0.0;
         let mut entropy_loss = 0.0;
 
-        for _epoch in 0..self.update_epochs {
+        for epoch in 0..self.update_epochs {
             let (
                 epoch_old_approx_kl,
                 epoch_approx_kl,
@@ -339,16 +332,19 @@ impl PPOAgent {
             self.policy.get_action_and_value(mb_obs, Some(mb_actions));
         let logratio = &newlogprob - mb_logprobs;
         let ratio = logratio.exp();
-
-        let old_approx_kl = (-&logratio).mean(Kind::Float).double_value(&[0]);
+        let old_approx_kl = (-&logratio).mean(Kind::Float).try_into().unwrap();
         let approx_kl = ((&ratio - 1.0) - &logratio)
             .mean(Kind::Float)
-            .double_value(&[0]);
+            .try_into()
+            .unwrap();
 
         let mb_advantages = if self.norm_adv {
             (mb_advantages - mb_advantages.mean(Kind::Float)) / (mb_advantages.std(true) + 1e-8)
         } else {
-            mb_advantages.shallow_clone()
+            let new_adv =
+                Tensor::zeros(mb_advantages.size(), (mb_advantages.kind(), self.device)).fill_(0.0);
+            mb_advantages.clone(&new_adv);
+            new_adv
         };
 
         let pg_loss1 = -&mb_advantages * &ratio;
@@ -364,29 +360,26 @@ impl PPOAgent {
             v_loss_unclipped
                 .max_other(&v_loss_clipped)
                 .mean(Kind::Float)
-                .double_value(&[0])
+                .try_into()
+                .unwrap()
         } else {
             (&newvalue - mb_returns)
                 .pow(&Tensor::from(2))
                 .mean(Kind::Float)
-                .double_value(&[0])
+                .try_into()
+                .unwrap()
         };
 
-        let entropy_loss = entropy.mean(Kind::Float).double_value(&[0]);
-        let loss = &pg_loss - self.ent_coef * entropy_loss + (v_loss / 2.0) * self.vf_coef;
-
+        let entropy_loss = entropy.mean(Kind::Float).try_into().unwrap();
+        let loss: &Tensor = &(pg_loss.shallow_clone() - self.ent_coef * entropy_loss
+            + (v_loss / 2.0) * self.vf_coef);
+        let pg_loss = pg_loss.try_into().unwrap();
         self.optimizer.zero_grad();
         loss.backward();
         self.optimizer.clip_grad_norm(self.max_grad_norm);
         self.optimizer.step();
 
-        (
-            old_approx_kl,
-            approx_kl,
-            pg_loss.double_value(&[0]),
-            v_loss,
-            entropy_loss,
-        )
+        (old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss)
     }
 
     pub fn learn(
@@ -402,8 +395,6 @@ impl PPOAgent {
         let mut results = vec![];
         let mut checkpoint = num_iterations / 10;
 
-        println!("Starting learning");
-
         for global_step in (0..num_iterations).step_by(self.num_steps) {
             if anneal_lr {
                 self.anneal_learning_rate(global_step, num_iterations);
@@ -411,7 +402,6 @@ impl PPOAgent {
             let (new_next_obs, new_next_done) = self.collect_rollout(next_obs, next_done);
             next_obs = new_next_obs;
             next_done = new_next_done;
-
             let (advantages, returns) = self.compute_advantages_returns(&next_obs, next_done);
             let result = self.optimize(advantages, returns);
             results.push(result);

@@ -58,7 +58,7 @@ impl PPO {
             SpaceInfo::Discrete(n) => Ok(n),
             SpaceInfo::Continuous(_) => Err(PyTypeError::new_err("ambiente inválido")),
         }? as i64;
-        let policy = Policy::new(input, output, Device::cuda_if_available());
+        let policy = Policy::new(input, output, Device::Cpu);
         let optimizer = OptimizerEnum::Adam(Adam::default());
         self.agent = Some(PPOAgent::new(
             policy,
@@ -79,7 +79,7 @@ impl PPO {
             0.5,
             0.5,
             Some(0.01),
-            Device::cuda_if_available(),
+            Device::Cpu,
         ));
         Ok(())
     }

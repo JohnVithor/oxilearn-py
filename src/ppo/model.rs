@@ -101,6 +101,7 @@ impl Policy {
             None => probs.sample(&[1]),
         };
 
+        println!("action: {}", action);
         let log_prob = probs.log_prob(&action);
         let entropy = probs.entropy();
         let value = self.critic.forward_t(x, true);
