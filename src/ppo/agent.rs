@@ -1,7 +1,7 @@
 use rand::seq::SliceRandom;
-use std::{collections::HashMap, time::Instant};
+use std::time::Instant;
 use tch::{
-    nn::{self, Optimizer, OptimizerConfig},
+    nn::{Optimizer, OptimizerConfig},
     Device, Kind, Tensor,
 };
 
@@ -20,7 +20,7 @@ pub struct OptimizationResults {
     pub explained_variance: f64,
 }
 
-pub struct PPO {
+pub struct PPOAgent {
     policy: Policy,
     optimizer: Optimizer,
     env: PyEnv,
@@ -44,7 +44,7 @@ pub struct PPO {
     device: Device,
 }
 
-impl PPO {
+impl PPOAgent {
     pub fn new(
         policy: Policy,
         optimizer: OptimizerEnum,
@@ -67,7 +67,7 @@ impl PPO {
         device: Device,
     ) -> Self {
         let rollout_buffer = Rollout::new(num_steps, &env, device);
-        PPO {
+        PPOAgent {
             optimizer: optimizer.build(policy.varstore(), learning_rate).unwrap(),
             policy,
             env,
@@ -95,6 +95,7 @@ impl PPO {
     pub fn collect_rollout(&mut self, mut next_obs: Tensor, mut next_done: bool) -> (Tensor, bool) {
         self.rollout_buffer.reset();
 
+        println!("collect_rollout");
         for _ in 0..self.num_steps {
             let (new_next_obs, new_next_done) = self.collect_step(next_obs, next_done);
             next_obs = new_next_obs;
@@ -109,19 +110,33 @@ impl PPO {
         let done = next_done;
 
         let (action, logprob, _, value) = self.policy.get_action_and_value(&next_obs, None);
-        let value = value.flatten(0, 1);
+        println!("flatten");
+        println!("value = {value}");
+        let value = value.flatten(0, -1);
+        println!("flatten value = {value}");
+        println!("action value = {action}");
+        println!("logprob value = {logprob}");
+
+        let b_action = action.shallow_clone();
+        let action_v: i64 = action.try_into().unwrap();
 
         let (new_obs, reward, terminations, truncations) =
-            self.env.step(action.int64_value(&[0]) as usize).unwrap();
+            self.env.step(action_v as usize).unwrap();
         let new_next_done = terminations | truncations;
         let new_next_obs = if new_next_done {
             self.env.reset(None).unwrap().to_device(self.device)
         } else {
             new_obs.to_device(self.device)
         };
+        println!("obs value = {obs}");
+        println!("b_action value = {b_action}");
+        println!("logprob value = {logprob}");
+        println!("reward value = {reward}");
+        println!("done value = {done}");
+        println!("value value = {value}");
 
         self.rollout_buffer
-            .add(&obs, &action, &logprob, reward as f64, done, &value);
+            .add(&obs, &b_action, &logprob, reward as f64, done, &value);
 
         // self.check_final_info(&infos);
         (new_next_obs, new_next_done)
@@ -386,6 +401,8 @@ impl PPO {
 
         let mut results = vec![];
         let mut checkpoint = num_iterations / 10;
+
+        println!("Starting learning");
 
         for global_step in (0..num_iterations).step_by(self.num_steps) {
             if anneal_lr {

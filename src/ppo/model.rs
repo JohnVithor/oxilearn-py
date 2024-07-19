@@ -98,7 +98,7 @@ impl Policy {
 
         let action = match action {
             Some(a) => a.shallow_clone(),
-            None => probs.sample(&[]),
+            None => probs.sample(&[1]),
         };
 
         let log_prob = probs.log_prob(&action);

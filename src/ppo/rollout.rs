@@ -1,4 +1,4 @@
-use tch::{Device, Tensor};
+use tch::{Device, Kind, Tensor};
 
 use crate::env::PyEnv;
 
@@ -11,6 +11,9 @@ pub struct Rollout {
     pub values: Tensor,
     pub episode_returns: Vec<f64>,
     pub step: usize,
+    pub device: Device,
+    obs_size: i64,
+    action_size: i64,
 }
 
 impl Rollout {
@@ -20,14 +23,17 @@ impl Rollout {
 
         let capacity = num_steps as i64;
         Self {
-            obs: Tensor::empty([capacity, obs_size], (tch::Kind::Double, device)),
-            actions: Tensor::empty([capacity, action_size], (tch::Kind::Double, device)),
-            logprobs: Tensor::empty(capacity, (tch::Kind::Double, device)),
-            rewards: Tensor::empty(capacity, (tch::Kind::Double, device)),
+            obs: Tensor::empty([capacity, obs_size], (tch::Kind::Float, device)),
+            actions: Tensor::empty([capacity, action_size], (tch::Kind::Int64, device)),
+            logprobs: Tensor::empty(capacity, (tch::Kind::Float, device)),
+            rewards: Tensor::empty(capacity, (tch::Kind::Float, device)),
             dones: Tensor::empty(capacity, (tch::Kind::Int8, device)),
-            values: Tensor::empty(capacity, (tch::Kind::Double, device)),
+            values: Tensor::empty(capacity, (tch::Kind::Float, device)),
             episode_returns: Vec::new(),
             step: 0,
+            device,
+            obs_size,
+            action_size,
         }
     }
 
@@ -40,12 +46,30 @@ impl Rollout {
         done: bool,
         value: &Tensor,
     ) {
-        self.obs.get(self.step as i64).copy_(obs);
-        self.actions.get(self.step as i64).copy_(action);
-        self.logprobs.get(self.step as i64).copy_(logprob);
-        self.rewards.get(self.step as i64).fill_(reward);
-        self.dones.get(self.step as i64).fill_(done as i64);
-        self.values.get(self.step as i64).copy_(value);
+        let index: i64 = self.obs_size * self.step as i64;
+        let index = Vec::from_iter(index..(index + self.obs_size));
+        let index = &Tensor::from_slice(&index).to_device(self.device);
+
+        self.obs = self.obs.put(index, obs, false);
+
+        // let index: i64 = self.action_size * self.step as i64;
+        // let index = Vec::from_iter(index..(index + self.action_size));
+        // let index = &Tensor::from_slice(&index).to_device(self.device);
+
+        let index = &Tensor::from_slice(&[self.step as i64]).to_device(self.device);
+
+        let reward = &Tensor::from(reward)
+            .to_device(self.device)
+            .to_kind(Kind::Float);
+        let done = &Tensor::from(done)
+            .to_device(self.device)
+            .to_kind(Kind::Int8);
+
+        self.actions = self.actions.put(index, action, false);
+        self.logprobs = self.logprobs.put(index, logprob, false);
+        self.rewards = self.rewards.put(index, reward, false);
+        self.dones = self.dones.put(index, done, false);
+        self.values = self.values.put(index, value, false);
 
         self.step += 1;
     }

@@ -10,6 +10,7 @@ use tch::Tensor;
 use crate::OxiLearnErr;
 
 #[pyclass]
+#[derive(Clone)]
 pub struct PyEnv {
     env: Py<PyAny>,
     pub reward_threshold: Option<f32>,
