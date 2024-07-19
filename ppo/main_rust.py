@@ -19,6 +19,7 @@ if __name__ == "__main__":
     device = torch.device("cpu")
 
     env = gym.wrappers.RecordEpisodeStatistics(gym.make(env_id))
+    env.reset(seed=seed)
     eval_env = gym.make(env_id)
     eval_env.reset(seed=seed)
 
@@ -26,12 +27,9 @@ if __name__ == "__main__":
         env.action_space, gym.spaces.Discrete
     ), "only discrete action space is supported"
 
-    agent = PPO()
-    print(f"created")
+    agent = PPO(seed)
     agent.prepare(env, eval_env)
-    print(f"prepared")
     agent.train()
-    print(f"Trained")
 
     results = agent.evaluate(10)
     print(f"Results: {results}")

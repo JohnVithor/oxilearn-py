@@ -2,7 +2,7 @@ use rand::seq::SliceRandom;
 use std::time::Instant;
 use tch::{
     nn::{Optimizer, OptimizerConfig},
-    Device, Kind, Tensor,
+    Device, IndexOp, Kind, Tensor,
 };
 
 use crate::{dqn::optimizer_enum::OptimizerEnum, env::PyEnv};
@@ -95,7 +95,7 @@ impl PPOAgent {
     pub fn collect_rollout(&mut self, mut next_obs: Tensor, mut next_done: bool) -> (Tensor, bool) {
         self.rollout_buffer.reset();
 
-        for _ in 0..self.num_steps {
+        for p in 0..self.num_steps {
             let (new_next_obs, new_next_done) = self.collect_step(next_obs, next_done);
             next_obs = new_next_obs;
             next_done = new_next_done;
@@ -108,9 +108,11 @@ impl PPOAgent {
         let obs = next_obs.shallow_clone();
         let done = next_done;
 
-        let (action, logprob, _, value) = self.policy.get_action_and_value(&next_obs, None);
-        let value = value.flatten(0, -1);
-
+        let (action, value, logprob) = tch::no_grad(|| {
+            let (action, logprob, _, value) = self.policy.get_action_and_value(&next_obs, None);
+            let value = value.flatten(0, -1);
+            (action, value, logprob)
+        });
         let b_action = action.shallow_clone();
         let action_v: i64 = action.try_into().unwrap();
 
@@ -135,9 +137,11 @@ impl PPOAgent {
         next_obs: &Tensor,
         next_done: bool,
     ) -> (Tensor, Tensor) {
-        let advantages = self.compute_advantages(next_obs, next_done);
-        let returns = &advantages + &self.rollout_buffer.values;
-        (advantages, returns)
+        tch::no_grad(|| {
+            let advantages = self.compute_advantages(next_obs, next_done);
+            let returns = &advantages + &self.rollout_buffer.values;
+            (advantages, returns)
+        })
     }
 
     fn compute_advantages(&mut self, next_obs: &Tensor, next_done: bool) -> Tensor {
@@ -186,10 +190,7 @@ impl PPOAgent {
             .obs
             .view([-1, self.env.observation_space().unwrap().shape()]);
         let b_logprobs = self.rollout_buffer.logprobs.view([-1]);
-        let b_actions = self
-            .rollout_buffer
-            .actions
-            .view([-1, self.env.action_space().unwrap().shape()]);
+        let b_actions = self.rollout_buffer.actions.view([-1]);
         let b_advantages = advantages.view([-1]);
         let b_returns = returns.view([-1]);
         let b_values = self.rollout_buffer.values.view([-1]);
@@ -220,19 +221,16 @@ impl PPOAgent {
         let mut final_pg_loss = 0.0;
         let mut final_v_loss = 0.0;
         let mut final_entropy_loss = 0.0;
-        println!("b_actions: {}", b_actions);
         for start in (0..self.batch_size).step_by(self.minibatch_size) {
             let end = start + self.minibatch_size;
             let mb_inds = &b_inds[start..end];
             let index = &Tensor::from_slice(mb_inds).to_device(self.device);
-            let mb_obs = b_obs.index_select(0, index);
-            let mb_actions = b_actions.index_select(0, index);
-            let mb_logprobs = b_logprobs.index_select(0, index);
-            let mb_returns = b_returns.index_select(0, index);
-            let mb_values = b_values.index_select(0, index);
-            let mb_advantages = b_advantages.index_select(0, index);
-
-            println!("mb_actions: {}", mb_actions);
+            let mb_obs = b_obs.i(index);
+            let mb_actions = b_actions.i(index);
+            let mb_logprobs = b_logprobs.i(index);
+            let mb_returns = b_returns.i(index);
+            let mb_values = b_values.i(index);
+            let mb_advantages = b_advantages.i(index);
 
             let (old_approx_kl, approx_kl, pg_loss, v_loss, entropy_loss) = self
                 .calculate_policy_loss(
@@ -300,12 +298,13 @@ impl PPOAgent {
             }
         }
 
-        let var_y = b_returns.var(true).double_value(&[0]);
+        let var_y: f64 = b_returns.var(true).try_into().unwrap();
         let explained_var = if var_y == 0.0 {
             std::f64::NAN
         } else {
             let diff = b_values - b_returns;
-            1.0 - diff.var(true).double_value(&[0]) / var_y
+            let v: f64 = diff.var(true).try_into().unwrap();
+            1.0 - v / var_y
         };
 
         OptimizationResults {
@@ -330,22 +329,26 @@ impl PPOAgent {
     ) -> (f64, f64, f64, f64, f64) {
         let (_new_action, newlogprob, entropy, newvalue) =
             self.policy.get_action_and_value(mb_obs, Some(mb_actions));
+
         let logratio = &newlogprob - mb_logprobs;
         let ratio = logratio.exp();
-        let old_approx_kl = (-&logratio).mean(Kind::Float).try_into().unwrap();
-        let approx_kl = ((&ratio - 1.0) - &logratio)
-            .mean(Kind::Float)
-            .try_into()
-            .unwrap();
 
-        let mb_advantages = if self.norm_adv {
-            (mb_advantages - mb_advantages.mean(Kind::Float)) / (mb_advantages.std(true) + 1e-8)
-        } else {
-            let new_adv =
-                Tensor::zeros(mb_advantages.size(), (mb_advantages.kind(), self.device)).fill_(0.0);
-            mb_advantages.clone(&new_adv);
-            new_adv
-        };
+        let (old_approx_kl, approx_kl) = tch::no_grad(|| {
+            let old_approx_kl = (-&logratio).mean(Kind::Float).try_into().unwrap();
+            let approx_kl = ((&ratio - 1.0) - &logratio)
+                .mean(Kind::Float)
+                .try_into()
+                .unwrap();
+            (old_approx_kl, approx_kl)
+        });
+        let mut new_adv =
+            Tensor::zeros(mb_advantages.size(), (mb_advantages.kind(), self.device)).fill_(0.0);
+        new_adv = mb_advantages.clone(&new_adv);
+        if self.norm_adv {
+            new_adv =
+                (mb_advantages - mb_advantages.mean(Kind::Float)) / (mb_advantages.std(true) + 1e-8)
+        }
+        let mb_advantages = new_adv;
 
         let pg_loss1 = -&mb_advantages * &ratio;
         let pg_loss2 = -mb_advantages * ratio.clamp(1.0 - self.clip_coef, 1.0 + self.clip_coef);
@@ -385,7 +388,7 @@ impl PPOAgent {
     pub fn learn(
         &mut self,
         num_iterations: usize,
-        seed: u64,
+        seed: i64,
         anneal_lr: bool,
     ) -> Vec<OptimizationResults> {
         let start_time = Instant::now();
@@ -440,7 +443,7 @@ impl PPOAgent {
             let mut episode_reward = 0.0;
 
             while !done {
-                let action = self.policy.get_best_action(&obs);
+                let action = tch::no_grad(|| self.policy.get_best_action(&obs));
                 let (new_obs, reward, terminations, truncations) = self
                     .eval_env
                     .step(action.int64_value(&[0]) as usize)

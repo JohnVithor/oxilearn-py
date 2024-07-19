@@ -61,7 +61,7 @@ impl PyEnv {
         })
     }
 
-    pub fn reset(&mut self, seed: Option<u64>) -> Result<Tensor, OxiLearnErr> {
+    pub fn reset(&mut self, seed: Option<i64>) -> Result<Tensor, OxiLearnErr> {
         Python::with_gil(|py| {
             let kwargs = match seed {
                 Some(seed) => Some([("seed", seed)].into_py_dict_bound(py)),

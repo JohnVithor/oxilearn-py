@@ -22,14 +22,17 @@ use super::{
 #[pyclass]
 pub struct PPO {
     agent: Option<PPOAgent>,
+    seed: i64,
 }
 
 #[pymethods]
 impl PPO {
     /// Create a new DQNAgent
     #[new]
-    fn new(py: Python) -> PyResult<Self> {
-        Ok(Self { agent: None })
+    #[pyo3(signature = (seed))]
+    fn new(py: Python, seed: i64) -> PyResult<Self> {
+        tch::manual_seed(seed);
+        Ok(Self { agent: None, seed })
     }
 
     #[pyo3(signature = ())]
@@ -58,7 +61,8 @@ impl PPO {
             SpaceInfo::Discrete(n) => Ok(n),
             SpaceInfo::Continuous(_) => Err(PyTypeError::new_err("ambiente inválido")),
         }? as i64;
-        let policy = Policy::new(input, output, Device::Cpu);
+        let device = Device::Cpu;
+        let policy = Policy::new(input, output, device);
         let optimizer = OptimizerEnum::Adam(Adam::default());
         self.agent = Some(PPOAgent::new(
             policy,
@@ -79,7 +83,7 @@ impl PPO {
             0.5,
             0.5,
             Some(0.01),
-            Device::Cpu,
+            device,
         ));
         Ok(())
     }
@@ -87,12 +91,12 @@ impl PPO {
     #[pyo3(signature = ())]
     #[allow(clippy::too_many_arguments)]
     pub fn train(&mut self, py: Python) {
-        py.allow_threads(|| self.agent.as_mut().unwrap().learn(100_000, 0, true));
+        py.allow_threads(|| self.agent.as_mut().unwrap().learn(100_000, self.seed, true));
     }
 
-    #[pyo3(signature = (env, n_eval_episodes))]
+    #[pyo3(signature = (n_eval_episodes))]
     #[allow(clippy::too_many_arguments)]
-    pub fn evaluate(&mut self, env: Bound<PyAny>, n_eval_episodes: u32, py: Python) -> Vec<f32> {
+    pub fn evaluate(&mut self, n_eval_episodes: u32, py: Python) -> Vec<f32> {
         py.allow_threads(|| -> Vec<f32> {
             self.agent
                 .as_mut()

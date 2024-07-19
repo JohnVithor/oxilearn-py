@@ -18,12 +18,11 @@ pub struct Rollout {
 impl Rollout {
     pub fn new(num_steps: usize, env: &PyEnv, device: Device) -> Self {
         let obs_size = env.observation_space().unwrap().shape();
-        let action_size = env.action_space().unwrap().shape();
 
         let capacity = num_steps as i64;
         Self {
             obs: Tensor::empty([capacity, obs_size], (tch::Kind::Float, device)),
-            actions: Tensor::empty([capacity, action_size], (tch::Kind::Int64, device)),
+            actions: Tensor::empty(capacity, (tch::Kind::Int64, device)),
             logprobs: Tensor::empty(capacity, (tch::Kind::Float, device)),
             rewards: Tensor::empty(capacity, (tch::Kind::Float, device)),
             dones: Tensor::empty(capacity, (tch::Kind::Int8, device)),
