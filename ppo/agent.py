@@ -301,7 +301,7 @@ class PPO:
                 print(f"step {global_step}/{num_iterations} mean: {mean_epi_return}")
                 if mean_epi_return > self.eval_env.spec.reward_threshold:
                     print("Threshold reached!")
-                    # break
+                    break
         end_time = time.time()
         print(f"Learning took {end_time - start_time} seconds")
         return results

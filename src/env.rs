@@ -55,9 +55,22 @@ impl PyEnv {
                 "Object hasn't 'action_space' attribute!".to_string(),
             ));
         }
+
+        let reward_threshold = if env.hasattr("spec").unwrap() {
+            let a = env.getattr("spec").unwrap();
+            if a.hasattr("reward_threshold").unwrap() {
+                let a = a.getattr("reward_threshold").unwrap();
+                let value = a.extract::<f32>().unwrap();
+                Some(value)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         Ok(Self {
             env: env.unbind(),
-            reward_threshold: None,
+            reward_threshold,
         })
     }
 
