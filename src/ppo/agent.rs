@@ -45,6 +45,7 @@ pub struct PPOAgent {
 }
 
 impl PPOAgent {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         policy: Policy,
         optimizer: OptimizerEnum,
@@ -95,7 +96,7 @@ impl PPOAgent {
     pub fn collect_rollout(&mut self, mut next_obs: Tensor, mut next_done: bool) -> (Tensor, bool) {
         self.rollout_buffer.reset();
 
-        for p in 0..self.num_steps {
+        for _p in 0..self.num_steps {
             let (new_next_obs, new_next_done) = self.collect_step(next_obs, next_done);
             next_obs = new_next_obs;
             next_done = new_next_done;
@@ -204,6 +205,7 @@ impl PPOAgent {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn optimize_epoch(
         &mut self,
         b_inds: &mut [i64],
@@ -268,7 +270,7 @@ impl PPOAgent {
         let mut v_loss = 0.0;
         let mut entropy_loss = 0.0;
 
-        for epoch in 0..self.update_epochs {
+        for _epoch in 0..self.update_epochs {
             let (
                 epoch_old_approx_kl,
                 epoch_approx_kl,
@@ -318,6 +320,7 @@ impl PPOAgent {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn calculate_policy_loss(
         &mut self,
         mb_obs: &Tensor,

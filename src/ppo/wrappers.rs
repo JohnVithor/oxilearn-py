@@ -1,23 +1,12 @@
-use pyo3::{
-    exceptions::{PyFileNotFoundError, PyTypeError, PyValueError},
-    pyclass, pymethods, Bound, PyAny, PyResult, Python,
-};
-use rand::{rngs::SmallRng, RngCore, SeedableRng};
-use tch::{
-    nn::{Adam, AdamW, RmsProp, Sgd},
-    Device, Kind, Tensor,
-};
+use pyo3::{exceptions::PyTypeError, pyclass, pymethods, Bound, PyAny, PyResult, Python};
+use tch::{nn::Adam, Device};
 
 use crate::{
     dqn::optimizer_enum::OptimizerEnum,
     env::{PyEnv, SpaceInfo},
-    OxiLearnErr,
 };
 
-use super::{
-    agent::{OptimizationResults, PPOAgent},
-    model::Policy,
-};
+use super::{agent::PPOAgent, model::Policy};
 
 #[pyclass]
 pub struct PPO {
@@ -30,7 +19,7 @@ impl PPO {
     /// Create a new DQNAgent
     #[new]
     #[pyo3(signature = (seed))]
-    fn new(py: Python, seed: i64) -> PyResult<Self> {
+    fn new(seed: i64) -> PyResult<Self> {
         tch::manual_seed(seed);
         Ok(Self { agent: None, seed })
     }
