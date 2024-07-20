@@ -1,6 +1,6 @@
 use tch::nn::LinearConfig;
-use tch::nn::ModuleT;
-use tch::nn::SequentialT;
+use tch::nn::Module;
+use tch::nn::Sequential;
 use tch::nn::VarStore;
 use tch::Device;
 use tch::{nn, Tensor};
@@ -9,8 +9,8 @@ use super::categorical::Categorical;
 
 #[derive(Debug)]
 pub struct Policy {
-    critic: SequentialT,
-    actor: SequentialT,
+    critic: Sequential,
+    actor: Sequential,
     vs: nn::VarStore,
 }
 
@@ -38,7 +38,7 @@ impl Policy {
             bias: true,
         };
 
-        let critic = nn::seq_t()
+        let critic = nn::seq()
             .add(nn::linear(
                 vs.root() / format!("critic/{}", 1),
                 obs_shape,
@@ -60,7 +60,7 @@ impl Policy {
                 config2,
             ));
 
-        let actor = nn::seq_t()
+        let actor = nn::seq()
             .add(nn::linear(
                 vs.root() / format!("actor/{}", 1),
                 obs_shape,
@@ -85,7 +85,7 @@ impl Policy {
     }
 
     pub fn get_value(&self, x: &Tensor) -> Tensor {
-        self.critic.forward_t(x, true)
+        self.critic.forward(x)
     }
 
     pub fn get_action_and_value(
@@ -93,7 +93,7 @@ impl Policy {
         x: &Tensor,
         action: Option<&Tensor>,
     ) -> (Tensor, Tensor, Tensor, Tensor) {
-        let logits = self.actor.forward_t(x, true);
+        let logits = self.actor.forward(x);
         let probs = Categorical::from_logits(logits);
 
         let action = match action {
@@ -103,13 +103,13 @@ impl Policy {
 
         let log_prob = probs.log_prob(&action);
         let entropy = probs.entropy();
-        let value = self.critic.forward_t(x, true);
+        let value = self.critic.forward(x);
 
         (action, log_prob, entropy, value)
     }
 
     pub fn get_best_action(&self, x: &Tensor) -> Tensor {
-        let logits = self.actor.forward_t(x, true);
+        let logits = self.actor.forward(x);
         logits.argmax(-1, true)
     }
 

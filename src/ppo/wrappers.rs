@@ -20,7 +20,6 @@ impl PPO {
     #[new]
     #[pyo3(signature = (seed))]
     fn new(seed: i64) -> PyResult<Self> {
-        tch::manual_seed(seed);
         Ok(Self { agent: None, seed })
     }
 
@@ -37,6 +36,7 @@ impl PPO {
     ) -> PyResult<()> {
         let val_env = PyEnv::new(val_environment)?;
         let environment = PyEnv::new(environment)?;
+        tch::manual_seed(self.seed);
         self.create_agent(environment, val_env)?;
         Ok(())
     }
