@@ -84,7 +84,7 @@ impl Policy {
         Policy { critic, actor, vs }
     }
 
-    pub fn get_value(&self, x: &Tensor) -> Tensor {
+    pub fn get_critic_value(&self, x: &Tensor) -> Tensor {
         self.critic.forward(x)
     }
 
@@ -95,17 +95,18 @@ impl Policy {
     ) -> (Tensor, Tensor, Tensor, Tensor) {
         let logits = self.actor.forward(x);
         let probs = Categorical::from_logits(logits);
-
         let action = match action {
             Some(a) => a.shallow_clone(),
             None => probs.sample(&[1]),
         };
-
         let log_prob = probs.log_prob(&action);
         let entropy = probs.entropy();
         let value = self.critic.forward(x);
-
         (action, log_prob, entropy, value)
+    }
+
+    pub fn get_actor_logits(&self, x: &Tensor) -> Tensor {
+        self.actor.forward(x)
     }
 
     pub fn get_best_action(&self, x: &Tensor) -> Tensor {

@@ -1,4 +1,3 @@
-use rand::seq::SliceRandom;
 use std::time::Instant;
 use tch::{
     nn::{Optimizer, OptimizerConfig},
@@ -7,7 +6,7 @@ use tch::{
 
 use crate::{dqn::optimizer_enum::OptimizerEnum, env::PyEnv};
 
-use super::{model::Policy, rollout::Rollout};
+use super::{categorical::Categorical, model::Policy, rollout::Rollout};
 
 #[derive(Debug)]
 pub struct OptimizationResults {
@@ -110,8 +109,11 @@ impl PPOAgent {
         let done = next_done;
 
         let (action, value, logprob) = tch::no_grad(|| {
-            let (action, logprob, _, value) = self.policy.get_action_and_value(&next_obs, None);
-            let value = value.flatten(0, -1);
+            let logits = self.policy.get_actor_logits(&next_obs);
+            let value = self.policy.get_critic_value(&next_obs);
+            let probs = Categorical::from_logits(logits);
+            let action = probs.sample(&[1]);
+            let logprob = probs.log_prob(&action);
             (action, value, logprob)
         });
         let b_action = action.shallow_clone();
@@ -146,7 +148,7 @@ impl PPOAgent {
     }
 
     fn compute_advantages(&mut self, next_obs: &Tensor, next_done: bool) -> Tensor {
-        let next_value = self.policy.get_value(next_obs).reshape([1, -1]);
+        let next_value = self.policy.get_critic_value(next_obs).reshape([1, -1]);
         let mut advantages =
             Tensor::zeros_like(&self.rollout_buffer.rewards).to_device(self.device);
         let mut lastgaelam = 0.0;
@@ -208,7 +210,6 @@ impl PPOAgent {
     #[allow(clippy::too_many_arguments)]
     fn optimize_epoch(
         &mut self,
-        b_inds: &mut [i64],
         b_obs: &Tensor,
         b_actions: &Tensor,
         b_logprobs: &Tensor,
@@ -216,7 +217,7 @@ impl PPOAgent {
         b_values: &Tensor,
         b_advantages: &Tensor,
     ) -> (f64, f64, f64, f64, f64) {
-        b_inds.shuffle(&mut rand::thread_rng());
+        let b_inds = Tensor::randperm(self.batch_size as i64, (Kind::Int64, self.device));
 
         let mut final_old_approx_kl = 0.0;
         let mut final_approx_kl = 0.0;
@@ -225,8 +226,7 @@ impl PPOAgent {
         let mut final_entropy_loss = 0.0;
         for start in (0..self.batch_size).step_by(self.minibatch_size) {
             let end = start + self.minibatch_size;
-            let mb_inds = &b_inds[start..end];
-            let index = &Tensor::from_slice(mb_inds).to_device(self.device);
+            let index = &b_inds.slice(0, start as i64, end as i64, 1);
             let mb_obs = b_obs.i(index);
             let mb_actions = b_actions.i(index);
             let mb_logprobs = b_logprobs.i(index);
@@ -262,7 +262,6 @@ impl PPOAgent {
     pub fn optimize(&mut self, advantages: Tensor, returns: Tensor) -> OptimizationResults {
         let (b_obs, b_logprobs, b_actions, b_advantages, b_returns, b_values) =
             self.flatten_data(&advantages, &returns);
-        let mut b_inds: Vec<i64> = (0..self.batch_size).map(|x| x as i64).collect();
 
         let mut old_approx_kl = 0.0;
         let mut approx_kl = 0.0;
@@ -278,7 +277,6 @@ impl PPOAgent {
                 epoch_v_loss,
                 epoch_entropy_loss,
             ) = self.optimize_epoch(
-                &mut b_inds,
                 &b_obs,
                 &b_actions,
                 &b_logprobs,
@@ -330,8 +328,12 @@ impl PPOAgent {
         mb_values: &Tensor,
         mb_advantages: &Tensor,
     ) -> (f64, f64, f64, f64, f64) {
-        let (_new_action, newlogprob, entropy, newvalue) =
-            self.policy.get_action_and_value(mb_obs, Some(mb_actions));
+        let (newlogprob, entropy, newvalue) = {
+            let logits = self.policy.get_actor_logits(mb_obs);
+            let value = self.policy.get_critic_value(mb_obs);
+            let probs = Categorical::from_logits(logits);
+            (probs.log_prob(mb_actions), probs.entropy(), value)
+        };
 
         let logratio = &newlogprob - mb_logprobs;
         let ratio = logratio.exp();
@@ -406,10 +408,13 @@ impl PPOAgent {
                 self.anneal_learning_rate(global_step, num_iterations);
             }
             let (new_next_obs, new_next_done) = self.collect_rollout(next_obs, next_done);
+
             next_obs = new_next_obs;
             next_done = new_next_done;
             let (advantages, returns) = self.compute_advantages_returns(&next_obs, next_done);
             let result = self.optimize(advantages, returns);
+            // println!("{:?}", result);
+            // panic!("stop");
             results.push(result);
 
             if global_step >= checkpoint {
