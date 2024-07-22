@@ -1,4 +1,5 @@
 use numpy::{ndarray::Array1, PyReadonlyArrayDyn};
+use oxilearn::env::{Env, SpaceInfo};
 use pyo3::{
     exceptions::PyTypeError,
     pyclass,
@@ -7,35 +8,13 @@ use pyo3::{
 };
 use tch::Tensor;
 
-use crate::OxiLearnErr;
+use oxilearn::OxiLearnErr;
 
 #[pyclass]
 #[derive(Clone)]
 pub struct PyEnv {
     env: Py<PyAny>,
     pub reward_threshold: Option<f32>,
-}
-
-#[derive(Debug, Clone)]
-pub enum SpaceInfo {
-    Discrete(usize),
-    Continuous(Vec<(f32, f32)>),
-}
-
-impl SpaceInfo {
-    pub fn is_discrete(&self) -> bool {
-        match self {
-            SpaceInfo::Discrete(_) => true,
-            SpaceInfo::Continuous(_) => false,
-        }
-    }
-
-    pub fn shape(&self) -> i64 {
-        match self {
-            SpaceInfo::Discrete(n) => *n as i64,
-            SpaceInfo::Continuous(v) => v.len() as i64,
-        }
-    }
 }
 
 impl PyEnv {
@@ -73,8 +52,10 @@ impl PyEnv {
             reward_threshold,
         })
     }
+}
 
-    pub fn reset(&mut self, seed: Option<i64>) -> Result<Tensor, OxiLearnErr> {
+impl Env for PyEnv {
+    fn reset(&mut self, seed: Option<i64>) -> Result<Tensor, OxiLearnErr> {
         Python::with_gil(|py| {
             let kwargs = seed.map(|seed| [("seed", seed)].into_py_dict_bound(py));
             let kwargs = kwargs.as_ref();
@@ -88,7 +69,7 @@ impl PyEnv {
         })
     }
 
-    pub fn step(&mut self, action: usize) -> Result<(Tensor, f32, bool, bool), OxiLearnErr> {
+    fn step(&mut self, action: usize) -> Result<(Tensor, f32, bool, bool), OxiLearnErr> {
         Python::with_gil(|py| {
             let Ok(call_result) =
                 self.env
@@ -107,18 +88,22 @@ impl PyEnv {
         })
     }
 
-    pub fn observation_space(&self) -> Result<SpaceInfo, OxiLearnErr> {
+    fn observation_space(&self) -> Result<SpaceInfo, OxiLearnErr> {
         Python::with_gil(|py| {
             let attribute = self.env.getattr(py, "observation_space").unwrap();
             extract_space(attribute.bind(py))
         })
     }
 
-    pub fn action_space(&self) -> Result<SpaceInfo, OxiLearnErr> {
+    fn action_space(&self) -> Result<SpaceInfo, OxiLearnErr> {
         Python::with_gil(|py| {
             let attribute = self.env.getattr(py, "action_space").unwrap();
             extract_space(attribute.bind(py))
         })
+    }
+
+    fn reward_threshold(&self) -> Option<f32> {
+        self.reward_threshold
     }
 }
 

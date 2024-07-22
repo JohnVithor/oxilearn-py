@@ -4,7 +4,7 @@ import os
 import torch
 import numpy as np
 import random
-from oxilearn import DQN
+from oxilearnpy import DQN
 
 
 def main(seed, save, verbose):
@@ -23,6 +23,11 @@ def main(seed, save, verbose):
         final_epsilon=0.05,
         exploration_fraction=0.2,
         max_grad_norm=1.0,
+        gradient_steps=175,
+        train_freq=200,
+        update_freq=10,
+        batch_size=128,
+        eval_for=10,
         seed=seed,
         normalize_obs=False,
         optimizer="Adam",
@@ -35,13 +40,7 @@ def main(seed, save, verbose):
     results = model.train(
         env,
         eval_env,
-        env.spec.reward_threshold,
         steps=50_000,
-        gradient_steps=175,
-        train_freq=200,
-        update_freq=10,
-        batch_size=128,
-        eval_for=10,
         verbose=verbose,
     )
     training_steps = sum(results[1])

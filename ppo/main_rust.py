@@ -5,7 +5,7 @@ import numpy as np
 import random
 
 from model import Policy
-from oxilearn import PPO
+from oxilearnpy import PPO
 
 
 if __name__ == "__main__":
@@ -28,10 +28,12 @@ if __name__ == "__main__":
     ), "only discrete action space is supported"
 
     agent = PPO(seed)
-    agent.prepare(env, eval_env)
-    agent.train()
+    obs_shape = env.observation_space.shape
+    n_action = env.action_space.n
+    agent.prepare(obs_shape[0], n_action)
+    agent.train(env, eval_env)
 
-    results = agent.evaluate(10)
+    results = agent.evaluate(eval_env, 10)
     print(f"Results: {results}")
 
     env.close()
