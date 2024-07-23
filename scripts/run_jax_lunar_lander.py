@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import random
 import os
-from stable_baselines3 import DQN
+from sbx import DQN
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
@@ -19,10 +19,10 @@ def main(seed, save, verbose):
     callback_freq = 1_000
 
     vec_env = make_vec_env(
-        "LunarLander-v2", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv
+        "CartPole-v1", seed=seed + 1, n_envs=1, vec_env_cls=DummyVecEnv
     )
     eval_env = make_vec_env(
-        "LunarLander-v2", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv
+        "CartPole-v1", seed=seed + 2, n_envs=1, vec_env_cls=DummyVecEnv
     )
 
     model = DQN(
@@ -39,6 +39,7 @@ def main(seed, save, verbose):
         exploration_initial_eps=1.00,
         exploration_fraction=0.5,
         exploration_final_eps=0.04,
+        seed=seed,
         policy_kwargs={"net_arch": [256, 256]},
     )
     # if os.path.exists('./safetensors'):
@@ -52,6 +53,7 @@ def main(seed, save, verbose):
         eval_env,
         callback_on_new_best=callback_on_best,
         eval_freq=callback_freq,
+        n_eval_episodes=eval_size,
         verbose=verbose,
     )
 
@@ -83,4 +85,4 @@ if __name__ == "__main__":
     random.seed(seed)
 
     training_steps, (reward, std) = main(seed, save, verbose)
-    print(f"python,{seed},{training_steps},{reward},{std}")
+    print(f"jax,{seed},{training_steps},{reward},{std}")

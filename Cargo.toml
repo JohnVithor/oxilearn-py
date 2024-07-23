@@ -1,18 +1,16 @@
 [package]
-name = "oxilearn"
+name = "oxilearnpy"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "oxilearn"
+name = "oxilearnpy"
 crate-type = ["cdylib"]
 
 [dependencies]
+ndarray = "0.15"
+rand = { version = "0.8", features = ["small_rng"] }
+tch = { version = "0.16"}
 pyo3 = { version = "0.21", features = ["extension-module"] }
 numpy = "0.21"
-tch = { version = "0.15", features = ["python-extension"] }
-rand = { version="0.8", features = ["small_rng"] }
-
-[dev-dependencies]
-torch-sys = { version = "0.15", features = ["python-extension"] }
+oxilearn = { path = "../oxilearn" }

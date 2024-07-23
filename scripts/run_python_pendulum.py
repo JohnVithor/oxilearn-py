@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import random
 import os
-from stable_baselines3 import DQN
+from stable_baselines3 import PPO
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
@@ -18,35 +18,25 @@ def main(seed, save, verbose):
     eval_size = 10
     callback_freq = 1_000
 
-    vec_env = make_vec_env(
-        "LunarLander-v2", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv
-    )
-    eval_env = make_vec_env(
-        "LunarLander-v2", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv
-    )
+    vec_env = make_vec_env("Pendulum-v1", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv)
+    eval_env = make_vec_env("Pendulum-v1", seed=seed, n_envs=1, vec_env_cls=DummyVecEnv)
 
-    model = DQN(
+    model = PPO(
         policy="MlpPolicy",
         env=vec_env,
-        learning_rate=6.3e-4,
-        batch_size=128,
-        buffer_size=100_000,
-        learning_starts=1000,
-        gamma=0.99,
-        target_update_interval=10,
-        train_freq=128,
-        gradient_steps=128,
-        exploration_initial_eps=1.00,
-        exploration_fraction=0.5,
-        exploration_final_eps=0.04,
-        policy_kwargs={"net_arch": [256, 256]},
+        learning_rate=1e-3,
+        gamma=0.9,
+        n_steps=1024,
+        n_epochs=10,
+        gae_lambda=0.95,
+        ent_coef=0.0,
+        clip_range=0.2,
+        seed=seed,
     )
-    # if os.path.exists('./safetensors'):
-    #     model.q_net.load_state_dict(load_file('./safetensors/policy_weights.safetensors'))
-    #     model.q_net_target.load_state_dict(load_file('./safetensors/target_policy_weights.safetensors'))
 
+    reward_threshold = -100.0
     callback_on_best = StopTrainingOnRewardThreshold(
-        reward_threshold=vec_env.get_attr("spec")[0].reward_threshold, verbose=verbose
+        reward_threshold=reward_threshold, verbose=verbose
     )
     eval_callback = EvalCallback(
         eval_env,
@@ -55,20 +45,22 @@ def main(seed, save, verbose):
         verbose=verbose,
     )
 
-    model.learn(total_timesteps=1e5, callback=[eval_callback])
+    model.learn(total_timesteps=1_000_000, callback=[eval_callback])
 
     if save:
-        os.mkdir("./safetensors-python")
+        os.makedirs("./safetensors-python", exist_ok=True)
         save_file(
-            model.q_net.state_dict(), "./safetensors-python/policy_weights.safetensors"
+            model.policy.mlp_extractor.policy_net.state_dict(),
+            "./safetensors-python/policy_weights.safetensors",
         )
         save_file(
-            model.q_net_target.state_dict(),
-            "./safetensors-python/target_policy_weights.safetensors",
+            model.policy.mlp_extractor.value_net.state_dict(),
+            "./safetensors-python/value_weights.safetensors",
         )
+        save_file(model.policy.state_dict(), "./safetensors-python/p.safetensors")
 
     return model.num_timesteps, evaluate_policy(
-        model, eval_env, n_eval_episodes=eval_size
+        model, eval_env, n_eval_episodes=eval_size, render=True
     )
 
 

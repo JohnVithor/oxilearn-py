@@ -4,24 +4,24 @@ import os
 import torch
 import numpy as np
 import random
-from oxilearn import DQN
+from wrapper import DQN
 
 
 def main(seed, save, verbose):
 
-    env = gym.make("LunarLander-v2")
-    eval_env = gym.make("LunarLander-v2")
+    env = gym.make("CartPole-v1")
+    eval_env = gym.make("CartPole-v1")
 
     model = DQN(
         net_arch=[(256, "relu"), (256, "relu")],
-        learning_rate=0.01,
+        learning_rate=0.03,
         last_activation="none",
-        memory_size=50_000,
+        memory_size=10_000,
         min_memory_size=1_000,
-        discount_factor=0.999,
+        discount_factor=0.99,
         initial_epsilon=1.0,
-        final_epsilon=0.1,
-        exploration_fraction=0.3,
+        final_epsilon=0.05,
+        exploration_fraction=0.2,
         max_grad_norm=1.0,
         seed=seed,
         normalize_obs=False,
@@ -36,21 +36,20 @@ def main(seed, save, verbose):
         env,
         eval_env,
         env.spec.reward_threshold,
-        steps=100_000,
-        gradient_steps=128,
-        train_freq=256,
+        steps=50_000,
+        gradient_steps=175,
+        train_freq=200,
         update_freq=10,
-        batch_size=32,
-        eval_freq=1_000,
+        batch_size=128,
         eval_for=10,
         verbose=verbose,
     )
     training_steps = sum(results[1])
 
     if save:
-        model.save("./safetensors-rust")
+        model.save("./safetensors-mypython")
 
-    return training_steps, model.evaluate(env, 10)
+    return training_steps, model.evaluate(eval_env, 10)
 
 
 if __name__ == "__main__":
@@ -64,4 +63,4 @@ if __name__ == "__main__":
     random.seed(seed)
 
     training_steps, (reward, std) = main(seed, save, verbose)
-    print(f"rust,{seed},{training_steps},{reward},{std}")
+    print(f"mypython,{seed},{training_steps},{reward},{std}")
