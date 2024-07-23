@@ -35,6 +35,7 @@ pub struct DQN {
   normalize_obs: bool,
   optimizer: OptimizerEnum,
   loss_fn: fn(&Tensor, &Tensor) -> Tensor,
+  device: Device
 }
 
 impl DQN {
@@ -74,7 +75,8 @@ impl DQN {
       normalize_obs=false,
       optimizer="Adam",
       // optimizer_info=HashMap::default(),
-      loss_fn="MSE"
+      loss_fn="MSE",
+      device="cuda"
   ))]
   #[allow(clippy::too_many_arguments)]
   fn new(
@@ -99,13 +101,18 @@ impl DQN {
       optimizer: &str,
       // optimizer_info: HashMap<String, String>,
       loss_fn: &str,
+      device: &str,
       py: Python,
   ) -> PyResult<Self> {
       py.allow_threads(|| -> PyResult<Self> {
           let mut rng: SmallRng = SmallRng::seed_from_u64(seed);
           tch::manual_seed(rng.next_u64() as i64);
         //   tch::maybe_init_cuda();
-  
+            let device = match device {
+                "cuda" => Device::Cuda(0),
+                "cpu" => Device::Cpu,
+                _ => return Err(PyTypeError::new_err("Error message")),
+            };
           let optimizer_info = match optimizer {
               "Adam" => Some(OptimizerEnum::Adam(Adam::default())),
               "Sgd" => Some(OptimizerEnum::Sgd(Sgd::default())),
@@ -157,6 +164,7 @@ impl DQN {
               optimizer,
               normalize_obs,
               loss_fn,
+              device
           })})
   }
 
@@ -211,7 +219,7 @@ impl DQN {
           self.min_memory_size,
           self.rng.next_u64(),
           self.normalize_obs,
-          Device::cuda_if_available(),
+          self.device,
       );
 
       let action_selector = EpsilonGreedy::new(
@@ -249,7 +257,7 @@ impl DQN {
           self.optimizer,
           self.loss_fn,
           parameters,
-          Device::cuda_if_available(),
+          self.device,
       ));
       Ok(())
   }

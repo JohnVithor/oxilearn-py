@@ -1,4 +1,4 @@
-use pyo3::{pyclass, pymethods, Bound, PyAny, PyResult, Python};
+use pyo3::{exceptions::PyTypeError, pyclass, pymethods, Bound, PyAny, PyResult, Python};
 use tch::{nn::Adam, Device};
 
 use crate::env::PyEnv;
@@ -12,15 +12,25 @@ use oxilearn::{
 pub struct PPO {
     agent: Option<PPOAgent>,
     seed: i64,
+    device: Device,
 }
 
 #[pymethods]
 impl PPO {
     /// Create a new DQNAgent
     #[new]
-    #[pyo3(signature = (seed))]
-    fn new(seed: i64) -> PyResult<Self> {
-        Ok(Self { agent: None, seed })
+    #[pyo3(signature = (seed, device="cuda"))]
+    fn new(seed: i64, device: &str) -> PyResult<Self> {
+        let device = match device {
+            "cuda" => Device::Cuda(0),
+            "cpu" => Device::Cpu,
+            _ => return Err(PyTypeError::new_err("Error message")),
+        };
+        Ok(Self {
+            agent: None,
+            seed,
+            device,
+        })
     }
 
     #[pyo3(signature = ())]
@@ -36,20 +46,16 @@ impl PPO {
     }
 
     fn create_agent(&mut self, obs_size: i64, n_action: i64) -> PyResult<()> {
-        // let obs_size = match environment.observation_space().unwrap() {
-        //     SpaceInfo::Discrete(_) => Err(PyTypeError::new_err("ambiente inválido")),
-        //     SpaceInfo::Continuous(s) => Ok(s.len()),
-        // }? as i64;
-        // let output = match environment.action_space().unwrap() {
-        //     SpaceInfo::Discrete(n) => Ok(n),
-        //     SpaceInfo::Continuous(_) => Err(PyTypeError::new_err("ambiente inválido")),
-        // }? as i64;
-        let device = Device::Cpu;
-        let policy = Policy::new(obs_size, n_action, device);
+        let policy = Policy::new(obs_size, n_action, self.device);
         let optimizer = OptimizerEnum::Adam(Adam::default());
         let parameters = ParametersPPO::default();
         self.agent = Some(PPOAgent::new(
-            policy, optimizer, obs_size, 100, parameters, device,
+            policy,
+            optimizer,
+            obs_size,
+            100,
+            parameters,
+            self.device,
         ));
         Ok(())
     }
